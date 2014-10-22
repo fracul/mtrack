@@ -1,0 +1,22 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -N mbtrack-mpi
+#PBS -j eo
+#PBS -l nodes=1:ppn=8
+#PBS -l walltime=00:10:00
+#PBS -l mem=2000mb
+
+#
+# MPI environment variables
+#
+
+mpivars.sh
+export MPIRUN=/usr/local/bin/mpirun
+export MPIRUN_OPTS="-f ${PBS_NODEFILE}"
+
+#
+# execution 
+#
+
+cd ${PBS_O_WORKDIR}
+./check-uninitialized.sh

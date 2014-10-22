@@ -1,0 +1,40 @@
+# DO NOT CHANGE THIS FILE WITHOUT UPDATING test_input.c
+
+bogus1 = 1.23
+
+[bogus_land]
+bogus1 =
+bogus2:
+bogus3
+bogus4 = this is 3
+
+[general]
+
+#cx = 2
+ ;cx = 2
+a: 1.1
+b :2.2
+c : 3.3
+d:4.4
+e =5.5
+f= 6.6
+g = 7.7
+h=8.8
+message=hello World!
+messagewident	= hello World!
+	  	fortytwo 	 = 	   42
+        n=-2
+        m=+5
+
+[physic]
+
+        clight=2.997925e+08
+
+[twin]
+ name = john
+
+[twin]
+ name = joe
+
+# [ghost]
+#  name = casper

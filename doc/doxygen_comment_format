@@ -1,0 +1,28 @@
+Format de commentaires à utiliser pour le logiciel Doxygen : 
+
+
+
+/**
+ * @file
+ * Description du fichier
+ */
+ 
+/**
+ * Description de la fonction init
+ */
+int init();
+
+/**
+ * Description de la fonction data
+ *
+ * @params data
+ *   Description du parameter data
+ *
+ * @return
+ *   Retourne une valeur X si tout se passe bien
+ *   Retourne une valeur différente en cas d'erreur
+ *
+ * @see processing2()
+ */
+int processing(data);
+

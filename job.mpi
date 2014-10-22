@@ -1,0 +1,71 @@
+#!/bin/bash
+#PBS -S /bin/bash
+#PBS -N mbtrack-mpi
+#PBS -j eo
+#PBS -l nodes=1:ppn=2
+#PBS -l walltime=100:00:00
+#PBS -l mem=2000mb
+
+# parameters
+
+COMMAND=mbtrack-mpi
+
+INPUT=work/mbtrack_optics_test.conf
+
+NB_TASKS=3
+
+
+# environment variables
+
+mpivars.sh
+
+
+# binary variables
+
+MPIRUN=/usr/local/bin/mpirun
+
+
+# output files
+
+cd ${PBS_O_WORKDIR}
+
+WORK_PATH=work/`date +%Y-%m-%d`_job${PBS_JOBID}/
+mkdir "${WORK_PATH}"
+INPUT_RO=${WORK_PATH}/$(basename "${INPUT}")
+cp "${INPUT}" "${INPUT_RO}"
+chmod -w "${INPUT_RO}"
+
+#NB_TASKS=$( cat ${PBS_NODEFILE} | wc -l )
+
+# cluster nodes
+
+#NODES=`sqnodes | sed '1,4d' | awk '/^[a-zA-Z0-9]+ /{print $1}'`
+#FREE_NODES=`sqnodes | sed '1,4d' | awk '/free[ \t]*$/{print $1}'`
+#sqnodes | sed '1,4d' | awk '/free[ \t]*$/{print $1}' | head -n 10 > mpd.hosts
+
+# execution
+
+echo "----------------------------------------"
+echo "Running ${COMMAND}"
+echo "----------------------------------------"
+echo "INPUT:         ${INPUT}"
+echo "PBS_O_WORKDIR: ${PBS_O_WORKDIR}"
+echo "WORK_PATH:     ${WORK_PATH}"
+echo "NB_TASKS:      ${NB_TASKS}"
+echo "----------------------------------------"
+
+
+${MPIRUN} -n ${NB_TASKS} -f ${PBS_NODEFILE} -r ssh /bin/bash -c "ulimit -s 128000 && ${COMMAND} ${INPUT_RO} ${WORK_PATH}"
+
+# plotting
+
+export PLOT_PATH=`pwd`/plot/
+
+echo "----------------------------------------"
+echo "Running plot.sh"
+echo "----------------------------------------"
+cd "${WORK_PATH}"
+${PLOT_PATH}/plot.sh
+echo "----------------------------------------"
+
+exit 0
