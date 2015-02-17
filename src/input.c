@@ -1440,10 +1440,12 @@ bool setup_ring_parameters(ring_t * ring)
   double tmp;
   unsigned Ntmp = 0;
   double mult =1.;
+  double genphase = 0;
   for(i = 1; i <= ring->longrange_resonators_size; i++)
   {
     LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
-    mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);
+    else genphase = atan(lr_resonator->Qfactor * ( lr_resonator->wr/ring->wrf - ring->wrf/lr_resonator->wr ));
     lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
@@ -1456,7 +1458,7 @@ bool setup_ring_parameters(ring_t * ring)
     if (lr_resonator->Nbu > Ntmp)
       Ntmp = lr_resonator->Nbu;
   }
-  ring->phai0 = asin(mult / ring->q);
+  ring->phai0 = asin(mult / ring->q)-genphase/2;
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
    
