@@ -6,9 +6,10 @@
 #include "transform_weak.h"
 #include "cyclic_array.h"
 #include "confmpi.h"
+#include "feedback_rf.h"
 
 /* Global variables */
-extern ring_t ring;
+//extern ring_t ring;
 extern tracking_t track;
 
 
@@ -17,7 +18,7 @@ extern tracking_t track;
 //*****************************************************//
 
 int
-transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model_t * bunchModel, int iseed, int kb)
+transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model_t * bunchModel, int iseed, int kb, const ring_t * ring)
 {
   unsigned int jp;
   double xeps_gainj;  
@@ -32,17 +33,17 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
   double PsiH0, PsiV0;
 
   /* Longitudinal trafo, ALWAYS */
-  const double damp = 1.0 - ring.De;
-  const double excite = 2.0 * bunchModel->slope_sgm.v[LON] * sqrt(ring.T0/ring.taue);
-  const double quantumV_pos = bunchModel->pos_sgm.v[VER] * sqrt(2.0 * ring.T0 / ring.tauz);
-  const double quantumV_slope = bunchModel->slope_sgm.v[VER] * sqrt(2.0 * ring.T0 / ring.tauz);
-  const double quantumH_pos = bunchModel->pos_sgm.v[HOR] * sqrt(2.0 * ring.T0 / ring.taux);
-  const double quantumH_slope = bunchModel->slope_sgm.v[HOR] * sqrt(2.0 * ring.T0 / ring.taux);
+  const double damp = 1.0 - ring->De;
+  const double excite = 2.0 * bunchModel->slope_sgm.v[LON] * sqrt(ring->T0/ring->taue);
+  const double quantumV_pos = bunchModel->pos_sgm.v[VER] * sqrt(2.0 * ring->T0 / ring->tauz);
+  const double quantumV_slope = bunchModel->slope_sgm.v[VER] * sqrt(2.0 * ring->T0 / ring->tauz);
+  const double quantumH_pos = bunchModel->pos_sgm.v[HOR] * sqrt(2.0 * ring->T0 / ring->taux);
+  const double quantumH_slope = bunchModel->slope_sgm.v[HOR] * sqrt(2.0 * ring->T0 / ring->taux);
   
   particle_t particle0[bunch->Np];
   particle_t * particle;
   double rffocus[bunch->Np];
-  double eps_const = ring.Vrf0 / (ring.E0 * FKILO);
+  double eps_const = ring->Vrf0 / (ring->E0 * FKILO);
   active_HC_t * aHC;
   
   if(track.EnableIdealHC == 0)
@@ -53,26 +54,26 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       particle0[jp] = bunch->particles[jp];
       particle = &(bunch->particles[jp]);
       /* xeps_gainj: energy gain by the RF cavity */
-      xeps_gainj = eps_const * sin(ring.wrf * particle0[jp].pos.xtau + ring.phai0);   
+      xeps_gainj = eps_const * sin(ring->wrf * particle0[jp].pos.xtau + ring->phai0);   
       
       // adding potential of active HCs
-      for(j = 0; j < ring.active_HC_size; j++)
+      for(j = 0; j < ring->active_HC_size; j++)
       {
-        aHC = &(ring.active_HC[j]);
+        aHC = &(ring->active_HC[j]);
 
-        xeps_gainj += aHC->Vpeak/(ring.E0 * FGIGA) * sin(ring.wrf * aHC->nHC * particle0[jp].pos.xtau + aHC->phi_aHC + aHC->nHC * kb * 2 * M_PI);
+        xeps_gainj += aHC->Vpeak/(ring->E0 * FGIGA) * sin(ring->wrf * aHC->nHC * particle0[jp].pos.xtau + aHC->phi_aHC + aHC->nHC * kb * 2 * M_PI);
 
       }      
       
       /* Urad: energy loss by radiation */
-      particle->slope.xtau = particle0[jp].slope.xtau  + xeps_gainj - ring.Urad;
+      particle->slope.xtau = particle0[jp].slope.xtau  + xeps_gainj - ring->Urad;
       
       if(track.EnableQuantum)
       {     
         particle->slope.xtau = particle->slope.xtau * damp + excite * c_fnorm(iseed);
         rffocus[jp] = (1.0 + particle0[jp].slope.xtau)/(1.0 + particle0[jp].slope.xtau + xeps_gainj);
       }
-      particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring.T0*ring.ac;
+      particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring->T0*ring->ac;
     }
   }
   else
@@ -83,15 +84,15 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       particle0[jp] = bunch->particles[jp];
       particle = &(bunch->particles[jp]);
       /* xeps_gainj: energy gain by the RF cavity & active HC */     
-      xeps_gainj = eps_const * (sin(ring.wrf * particle0[jp].pos.xtau + ring.phai0) + ring.HC_k * sin(ring.m_aHC * ring.wrf * particle0[jp].pos.xtau + ring.m_aHC * ring.phi_n));    
+      xeps_gainj = eps_const * (sin(ring->wrf * particle0[jp].pos.xtau + ring->phai0) + ring->HC_k * sin(ring->m_aHC * ring->wrf * particle0[jp].pos.xtau + ring->m_aHC * ring->phi_n));    
 
-      particle->slope.xtau = particle0[jp].slope.xtau  + xeps_gainj - ring.Urad;
+      particle->slope.xtau = particle0[jp].slope.xtau  + xeps_gainj - ring->Urad;
       if(track.EnableQuantum)
       {     
         particle->slope.xtau = particle->slope.xtau * damp + excite * c_fnorm(iseed);
         rffocus[jp] = (1.0 + particle0[jp].slope.xtau)/(1.0 + particle0[jp].slope.xtau + xeps_gainj);
       }
-      particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring.T0*ring.ac;
+      particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring->T0*ring->ac;
     }
   }
 
@@ -101,19 +102,19 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     {
       double PsiVj, cosVj, sinVj, amv11j, amv21j, amv12j, amv22j;
       
-      PsiV0   = 2.0*M_PI*ring.QV0;
-//       PsiV0   = 2.0*M_PI*ring.QV0/fNDlong;
+      PsiV0   = 2.0*M_PI*ring->QV0;
+//       PsiV0   = 2.0*M_PI*ring->QV0/fNDlong;
 //       for(is=0; is<NDlong; is++)
 //       {
         for(jp = 0; jp < bunch->Np; jp++)
         {
           particle = &(bunch->particles[jp]);
       
-          PsiVj  = PsiV0 * (1.0 + ring.Gziz * particle0[jp].slope.xtau);
+          PsiVj  = PsiV0 * (1.0 + ring->Gziz * particle0[jp].slope.xtau);
           cosVj  = cos(PsiVj);
           sinVj  = sin(PsiVj);
-          amv11j = cosVj + ring.alpha1[VER]*sinVj,   amv12j =         ring.beta1[VER]*sinVj;
-          amv21j =       - ring.gamma1[VER]*sinVj,   amv22j = cosVj - ring.alpha1[VER]*sinVj;
+          amv11j = cosVj + ring->alpha1[VER]*sinVj,   amv12j =         ring->beta1[VER]*sinVj;
+          amv21j =       - ring->gamma1[VER]*sinVj,   amv22j = cosVj - ring->alpha1[VER]*sinVj;
       
           particle->pos.z = amv11j*particle0[jp].pos.z + amv12j*particle0[jp].slope.z;
           particle->slope.z = amv21j*particle0[jp].pos.z + amv22j*particle0[jp].slope.z;
@@ -131,8 +132,8 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     if(track.TrackPlane[HOR])     
     { 
       double PsiHj, cosHj, sinHj, amh11j, amh12j, amh13j, amh21j, amh22j, amh23j;
-      PsiH0   = 2.0*M_PI*ring.QH0; 
-//       PsiH0   = 2.0*M_PI*ring.QH0/fNDlong; 
+      PsiH0   = 2.0*M_PI*ring->QH0; 
+//       PsiH0   = 2.0*M_PI*ring->QH0/fNDlong; 
 //       for(is=0; is<NDlong; is++)
 //       {
         /*** Transform the CM of kb-th bunch to the is-th observation point: ***/
@@ -140,15 +141,15 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
         {
           particle_t * particle = &(bunch->particles[jp]);
        
-          PsiHj  = PsiH0 * (1.0 + ring.Gzix * particle0[jp].slope.xtau);
+          PsiHj  = PsiH0 * (1.0 + ring->Gzix * particle0[jp].slope.xtau);
           cosHj  = cos(PsiHj);  
           sinHj = sin(PsiHj);          
-          amh11j = cosHj + ring.alpha1[HOR]*sinHj;
-          amh12j =         ring.beta1[HOR]*sinHj;
-          amh13j = (1.0 - amh11j)*ring.dispH1 - amh12j*ring.disppH1;
-          amh21j =       - ring.gamma1[HOR]*sinHj;
-          amh22j = cosHj - ring.alpha1[HOR]*sinHj;
-          amh23j =       -amh21j *ring.dispH1 + (1.0 - amh22j)*ring.disppH1;
+          amh11j = cosHj + ring->alpha1[HOR]*sinHj;
+          amh12j =         ring->beta1[HOR]*sinHj;
+          amh13j = (1.0 - amh11j)*ring->dispH1 - amh12j*ring->disppH1;
+          amh21j =       - ring->gamma1[HOR]*sinHj;
+          amh22j = cosHj - ring->alpha1[HOR]*sinHj;
+          amh23j =       -amh21j *ring->dispH1 + (1.0 - amh22j)*ring->disppH1;
           
           particle->pos.x = amh11j*particle0[jp].pos.x + amh12j*particle0[jp].slope.x  + amh13j*particle->slope.xtau;
           particle->slope.x = amh21j*particle0[jp].pos.x + amh22j*particle0[jp].slope.x + amh23j*particle->slope.xtau;
@@ -459,7 +460,8 @@ int
 transform_weak_bunch_selffield(weak_bunch_t * bunch,
                                const selffield_model_t SelfFieldModel, 
                                const cyclic_array_t * all_moments, const ring_t *ring,
-                               long unsigned int rev, FILE * fp, double scan_val, int kb, e_beam_t * ebeam, double * phasor_end,  double * fnp_ring)
+                               long unsigned int rev, FILE * fp, double scan_val, int kb, 
+			       e_beam_t * ebeam, double * phasor_end,  double * fnp_ring)
 
 {
   unsigned jp;
@@ -536,7 +538,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   {
     if(fnp[icell]>0)
     {
-      icellmin = icell;
+      icellmin = 1*icell;
       break;
     } 
   }     
@@ -545,7 +547,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   {
     if(fnp[icell] > 0)
     {
-      icellmax = icell;
+      icellmax = 1*icell;
       break;
     }  
   }
@@ -758,10 +760,11 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  
 
  void
- wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam)
+ wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, 
+		  weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam)
  {
    int i, j, k, l, m;
-   double V_old[2], V_new[2], progress[2], C[2];
+   double V_old[2], V_new[2], progress[2], C[2], prog2beam[2], progb2beam[2];
    
    // Determines the phasor after all bunches have Nturn-times passed
    for(l = 0; l < ring->longrange_resonators_size; l++)
@@ -787,19 +790,35 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      V_old[1] = 0.0;
      V_new[0] = phasor_end[l*2];
      V_new[1] = phasor_end[l*2 + 1];
+
+     double taubeam=0;
+     double taub2beam = 0;
+     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+       taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
+       taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
+       //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
+       //else taubeam = dTau*(Nbin/2+1);
+     }
+     prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
+     prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
+     progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
+     progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
      
      for(k=0; k<Nturns; k++)
      {
        for(m=0; m<ring->h; m++)
        {
          i = ring->h - m - 1;
+	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
+
          if(ebeam->nfFill[i] == 1)
          {
            for(j=0; j<Nbin; j++)      
            {        
              V_new[0] = (V_old[0] * progress[0] - V_old[1] * progress[1]) - ring->Ibunch[i] * fnp_ring[i*Nbin + j] * fac;
              V_new[1] = (V_old[0] * progress[1] + V_old[1] * progress[0]);
-             
+
              V_old[0] = V_new[0];
              V_old[1] = V_new[1]; 
            }
@@ -815,10 +834,12 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
          { // Decay and rotation of phasor during the passage of an empty buncket
            V_new[0] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h) - V_old[1] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h));
            V_new[1] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h) + V_old[1] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h));
-           
+
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
+	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
        }
      }
      phasor_end[l*2] = V_new[0];
@@ -835,13 +856,16 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  void
  construct_wake_phasor(double * lr_wake, double * phasor_end, 
                        const selffield_model_t * SelfFieldModel,
-                       const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch)
+                       const ring_t * ring, int kb, const double * fnp, 
+		       e_beam_t * ebeam, weak_bunch_t * bunch)
  {
    int i, j, l, m;
    double progress[2];
    double C[2];
    double V_old[2];
    double V_new[2];
+   double prog2beam[2];
+   double progb2beam[2];
    
    // Determines the phasor after all bunches have passed and stores the sum in lr_wake
    for(l = 0; l < ring->longrange_resonators_size; l++)
@@ -863,27 +887,44 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      V_old[1] = phasor_end[l*2 + 1];
      V_new[0] = phasor_end[l*2];
      V_new[1] = phasor_end[l*2 + 1];
+     double taubeam = 0;
+     double taub2beam = 0;
+     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+       taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
+       taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
+       //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
+       //else taubeam = dTau*(Nbin/2+1);
+     }
+     prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
+     prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
+     progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
+     progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
      
      for(m=0; m<ring->h; m++)
      {
        i = ring->h - m - 1;
+       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
+
        if(ebeam->nfFill[i] == 1)
        {
          for(j=0; j<Nbin; j++)
          {
-           if(i == kb)
-           {
-             lr_wake[j] += V_old[0]; // Phasor of actual resonator l is added 
-           }
+
            V_new[0] = (V_old[0] * progress[0] - V_old[1] * progress[1]) - ring->Ibunch[i] * fnp[i*Nbin + j] * fac;
            V_new[1] = (V_old[0] * progress[1] + V_old[1] * progress[0]);
-           
+
+           if(i == kb)
+           {
+             lr_wake[j] += V_new[0]+0.5*ring->Ibunch[i]*fnp[i*Nbin+j]*fac; // Phasor of actual resonator l is added 
+           }
+
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
          V_new[0] = (V_old[0] * exp(C[0]*tbucket)*cos(C[1]*tbucket) - V_old[1] * exp(C[0]*tbucket)*sin(C[1]*tbucket)); // Decay and rotation of phasor between bunches
          V_new[1] = (V_old[0] * exp(C[0]*tbucket)*sin(C[1]*tbucket) + V_old[1] * exp(C[0]*tbucket)*cos(C[1]*tbucket));
-         
+
          V_old[0] = V_new[0];
          V_old[1] = V_new[1]; 
        }
@@ -891,17 +932,17 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
        { // Decay and rotation of phasor during the passage of an empty buncket
          V_new[0] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h) - V_old[1] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h));
          V_new[1] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h) + V_old[1] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h));
-         
+
          V_old[0] = V_new[0];
          V_old[1] = V_new[1];
        }
+       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
      }    
      phasor_end[l*2] = V_new[0];
      phasor_end[l*2 + 1] = V_new[1];   
    }
  }
- 
- 
 
 void
 fnp_ring_destroy(double * fnp_ring)

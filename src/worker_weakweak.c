@@ -10,6 +10,7 @@
 #include "transform_weak.h"
 #include "tune.h"
 #include "tracking.h"
+#include "feedback_rf.h"
 
 
 /* Global variables */
@@ -37,6 +38,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
   unsigned int bnum=0;
   unsigned int i;
+  double phi0_design, vrf_design;
   for (i=0; i<ring.Nharm; i++)
       if (ebeam.nfFill[i])
       {
@@ -78,8 +80,8 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   
   /* Adding RW wake to SelfFieldModel */
   if(track.EnableRW_short)
-    construct_greensfunc_RW(&SelfFieldModel, &ring);  
-  
+    construct_greensfunc_RW(&SelfFieldModel, &ring);
+
   if(bunch.kb_out == 1)
   {
     char filename_wakes[FILENAME_MAX] = "";
@@ -104,6 +106,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   /* initialise cyclic array*/
   if(ring.longrange_resonators_size > 0)
   {
+    if (ring.has_rf_feedback)
+      rffb_init(ring.rf_feedback);
+  
     int Nbin = SelfFieldModel.Ncell;
     fnp_ring =
     (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
@@ -120,8 +125,21 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
 	}
       
     wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, phasor_end, &ebeam);
+
+    /* feedback: calculate current voltage and phase and try to restore to desired values after longrange wake initialisation*/
+    if (ring.has_rf_feedback) {
+      double vmbar, phibar;
+      rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
+      vmbar = vmbar*ring.E0*FKILO;
+      phi0_design = 1*ring.phai0;
+      vrf_design = 1*ring.Vrf0;
+      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
+      ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
+    }
+    
   }
-  
   
   /* initialise cyclic array*/
   if(track.EnableRW_long > 0)
@@ -186,11 +204,22 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */    
     if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + ring.longrange_resonators_size > 0)
       transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, fnp_ring);
+
+    /* RF feedback: calculate and apply turn by turn correction to RF parameters */
+    if (ring.has_rf_feedback) {
+      double vmbar, phibar;
+      rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
+      vmbar = vmbar*ring.E0*FKILO;
+      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
+      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+      ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
+    }
     
     /* Optics transformaiton including quantum excitation & radiation damping and active or passive HC*/
     /* Long. plane is always tracked, hor. and vert. has to be enabled */
-    if(transform_weak_bunch_optic(&bunch, &bunchModel, iseed+rev, kb) < 0)   
-      fprintf(stderr, "Error ! transform_optic_LON failed\n");   
+    if(transform_weak_bunch_optic(&bunch, &bunchModel, iseed+rev, kb, &ring) < 0)   
+      fprintf(stderr, "Error ! transform_optic_LON failed\n");
     
     /* FBII bunch TODO */
     /* FBII Communication TODO */    

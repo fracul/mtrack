@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include "def.h"
 #include "cyclic_array.h"
+#include "feedback_rf.h"
 
 /**
  * \brief Resonator, can have SelfField effect and/or long-range Wake Field effect
@@ -105,6 +106,8 @@ typedef struct ring
   unsigned lr_order; /** Approximation of the resonator wake up to this order */
   double * lr_wake; /** Wake pot. at m*delta_bucket and its (order) drivatives of all lr
   resonators */
+  rf_feedback_t * rf_feedback;
+  int has_rf_feedback;
   
   active_HC_t * active_HC;
   unsigned active_HC_size;
@@ -258,7 +261,5 @@ typedef struct weak_bunch
   */
 }
 weak_bunch_t;
-
-
 
 #endif /* MBTRACK_TYPES_H */

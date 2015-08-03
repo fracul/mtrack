@@ -630,7 +630,22 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     snprintf(section, 32, "harmonic_cavity_%d", i);
   }
   ring->longrange_resonators_size = i-1;
-  
+
+  /*
+   * [rf_feedback]
+   */
+  ring->rf_feedback = (rf_feedback_t *) malloc(1 * sizeof(rf_feedback_t));
+  rf_feedback_t * rffb = ring->rf_feedback;
+  snprintf(section, 32, "rf_feedback");
+  if (config_have_section(fp, section)) {
+    ring->has_rf_feedback = 1;
+    if (!config_get_int(fp, section, "resonator", &(rffb->lr_resonator)))
+      return false;
+
+    if (!config_get_int(fp, section, "averaging_length", &(rffb->len_average)))
+      return false;
+
+  }
   
    /*
    * [active_HC_1], [active_HC_2], ...
@@ -1210,10 +1225,15 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   /* otherwise problems in the ampinv statistics ! */
   if(filling == uniform)     
   {
-    for(kb=0; kb < ring->Nharm; kb++)     ebeam->nfFill[kb] = 1;
-    track->Nbunch_out = 1;
+    track->Nbunch_out = ring->Nharm;
     track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
-    track->bunch_out[0] = 0;
+    for(kb=0; kb < ring->Nharm; kb++) {
+      ebeam->nfFill[kb] = 1;
+      track->bunch_out[kb] = kb;
+    }
+    //track->Nbunch_out = 1;
+    //track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
+    //track->bunch_out[0] = 0;
   }
   else if(filling == onefourth)   
   {
@@ -1244,12 +1264,15 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   }
   else if(filling == threefourth) 
   {
-    for(kb=0; kb < 3*ring->Nharm/4; kb++) ebeam->nfFill[kb] = 1;
-    track->Nbunch_out = 3;
+    track->Nbunch_out = 3*ring->Nharm/4;
     track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
-    track->bunch_out[0] = 0;
-    track->bunch_out[1] = (int)3*ring->Nharm/8;
-    track->bunch_out[2] = (int)3*ring->Nharm/4 - 1; 
+    for(kb=0; kb < 3*ring->Nharm/4; kb++) {
+      ebeam->nfFill[kb] = 1;
+      track->bunch_out[kb] = kb;
+    }
+    //track->bunch_out[0] = 0;
+    //track->bunch_out[1] = (int)3*ring->Nharm/8;
+    //track->bunch_out[2] = (int)3*ring->Nharm/4 - 1; 
   }
   else if(filling == single)      
   {
@@ -1450,9 +1473,9 @@ bool setup_ring_parameters(ring_t * ring)
   for(i = 1; i <= ring->longrange_resonators_size; i++)
   {
     LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
-    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
-    else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
     lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
+    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+    else if (!ring->has_rf_feedback) genphase = atan(lr_resonator->Qfactor * ( lr_resonator->wr/ring->wrf - ring->wrf/lr_resonator->wr ));
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
     lr_resonator->Nbu = lr_resonator->Nturn * ring->h;
