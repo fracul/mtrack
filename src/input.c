@@ -1410,7 +1410,7 @@ bool setup_ring_parameters(ring_t * ring)
   ring->epsMax  = ring->U0 / (M_PI * ring->ac * ring->h * ring->E0 * FGIGA) * ring->Fq;
   ring->epsMax  = sqrt(ring->epsMax);  
   ring->Vrfp    = FMEGA * ring->Vrf0 * ring->wrf * sqrt(1.0 - 1.0/(ring->q * ring->q));
-  ring->wso     = sqrt(ring->ac * ring->Vrfp / ( ring->T0 * ring->E0 * FGIGA));
+  ring->wso     = sqrt(fabs(ring->ac) * ring->Vrfp / ( ring->T0 * ring->E0 * FGIGA));
   ring->wso2    = ring->wso * ring->wso;
   ring->fso     = ring->wso / (2.0 * M_PI);
   ring->Qso     = ring->fso * ring->T0;
@@ -1549,7 +1549,7 @@ bool macrop_model_setup_parameters(const ring_t ring, const tracking_t tracking,
   /* beam parameters */
   
   if(tracking.TrackPlane[LON] && macrop_model->sgm_xtau < 0.0)
-    macrop_model->sgm_xtau = FGIGA * ring.ac * ring.Gamma / ring.wso * sqrt(Cq/(ring.Je * ring.rho0));
+    macrop_model->sgm_xtau = FGIGA * fabs(ring.ac) * ring.Gamma / ring.wso * sqrt(Cq/(ring.Je * ring.rho0));
   if(tracking.TrackPlane[LON] && macrop_model->sgm_xeps < 0.0)
     macrop_model->sgm_xeps = sqrt(Cq * ring.Gamma2 / (ring.Je * ring.rho0));
 
