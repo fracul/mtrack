@@ -15,7 +15,7 @@
 
 CFLAGS=-Wall -O2
 CC=gcc
-MPICC=mpicc -DDEBUG_INPUT
+MPICC=mpicc-openmpi-gcc45 -DDEBUG_INPUT
 LIBS=-lm
 
 WEAKWEAK_OBJECTS=manager_weakweak.o worker_weakweak.o bunch_weak.o transform_weak.o cyclic_array.o

@@ -1419,7 +1419,7 @@ bool setup_ring_parameters(ring_t * ring)
 
 
   ring->sn0     = 1.0 / ring->q;
-  ring->phai0   = asin(1.0 / ring->q);
+  ring->phai0   = ring->ac/fabs(ring->ac)*asin(1.0 / ring->q);
   ring->fc1     = ring->ac / ring->wso;
   ring->fc12    = pow(ring->fc1, 2);
 
@@ -1458,7 +1458,7 @@ bool setup_ring_parameters(ring_t * ring)
     if (lr_resonator->Nbu > Ntmp)
       Ntmp = lr_resonator->Nbu;
   }
-  ring->phai0 = asin(mult / ring->q)-genphase/2;
+  ring->phai0 = ring->ac/fabs(ring->ac)*(asin(mult / ring->q)-genphase/2);
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
    
