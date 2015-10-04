@@ -1419,7 +1419,7 @@ bool setup_ring_parameters(ring_t * ring)
 
 
   ring->sn0     = 1.0 / ring->q;
-  ring->phai0   = ring->ac/fabs(ring->ac)*asin(1.0 / ring->q);
+  ring->phai0   = asin(1.0 / ring->q);
   ring->fc1     = ring->ac / ring->wso;
   ring->fc12    = pow(ring->fc1, 2);
 
@@ -1458,9 +1458,11 @@ bool setup_ring_parameters(ring_t * ring)
     if (lr_resonator->Nbu > Ntmp)
       Ntmp = lr_resonator->Nbu;
   }
-  ring->phai0 = ring->ac/fabs(ring->ac)*(asin(mult / ring->q)-genphase/2);
+  ring->phai0 = asin(mult / ring->q)-genphase/2;
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
+
+  if (ring->ac<0) ring->phai0 = M_PI-ring->phai0;
    
   return true;
 }
@@ -1472,6 +1474,10 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
   {
     ring->phai0 = asin(ring->m_aHC*ring->m_aHC /(ring->m_aHC*ring->m_aHC - 1.) / ring->q);
     ring->phi_n = atan(tan(ring->phai0) / (double) ring->m_aHC) / (double) ring->m_aHC;
+    if (ring->ac<0) {
+      ring->phai0 = M_PI-ring->phai0;
+      ring->phi_n = M_PI-ring->phi_n;
+    }
     ring->HC_k = -cos(ring->phai0) / (ring->m_aHC * cos(ring->m_aHC * ring->phi_n));
   }
   if(track->scan == 1)
