@@ -784,7 +784,7 @@ fbii_grid_setup_parameters(grid_t * grid,
 {
 
   /* Adopt the number taken by RZ (Raubenheimer/Zimmermann), 12 on each side */
-  grid->Ngrid     = 25;
+  grid->Ngrid     = 5;
   /* Number of division of transverse sigma */
   grid->Ndivs     =  3;
   /* Offset: Note that Ngrid should always be odd */

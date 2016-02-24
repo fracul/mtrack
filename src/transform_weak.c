@@ -398,7 +398,7 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
   double pi = M_PI;
   double t_const = sgmatau * dTau;
     
-  if (track.TrackPlane[LON])
+  if (track.TrackPlane[LON] && track.EnableRW_short_LON)
   {    
     double ARW = sqrt(Z_0 / (sigmarw*C_LIGHT*pi)) / (4*beffL1*pi) * ring->Lc;   
     for(nc=1; nc<ncellmax; nc++) 
@@ -555,16 +555,15 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   {
     /*  Construction of wake potential:      */
     double ntmoy, ntmoy0, ntmoy1; /* smoothen values for local density by averaging over neichboring cells */
-    GL1[icellmin] = 0.0; /* Front bin doesn't see any field -> causality */
-    for (icell = icellmin+1; icell <= icellmax; icell++)
+    for (icell = icellmin; icell <= SelfFieldModel.Ncell; icell++)
     {
       /***  Contribution of BBR impedances  ***/
       Gn = 0.0;
-      for (k = icell - 1; k >= icellmin; k--)
+      for (k = icell; k >= icellmin; k--)
       {
         Gn += fnp[k] * SelfFieldModel.Gl[icell - k];
       }
-      GL1[icell] = Gn + fnp[icell] * SelfFieldModel.Gl[0];
+      GL1[icell] = 1*Gn;
     }
     
     /***  Contribution of purely resistive impedances  ***/
@@ -600,13 +599,12 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   //**********************************************************************************//
   if(SelfFieldModel.PlaneV > 0)
   {
-    GlambdaV[0] = 0.0; /* Front bin doesn't see any field -> causality */
-    for (icell = 1; icell < SelfFieldModel.Ncell; icell++)
+    for (icell = 0; icell < SelfFieldModel.Ncell; icell++)
     {
       Gn = 0.0;
-      for (k = icell - 1; k >= 0; k--)
+      for (k = icell; k >= 0; k--)
         Gn += dipoleV[k] * SelfFieldModel.Gv[icell - k];
-      GlambdaV[icell] = Gn + dipoleV[icell]*GlambdaV[0];
+      GlambdaV[icell] = 1*Gn;
     }    
     for (jp = 0; jp < bunch->Np; jp++)
       bunch->particles[jp].slope.z += -factG * GlambdaV[mapcell[jp]];
@@ -615,13 +613,12 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   //**********************************************************************************//
   if(SelfFieldModel.PlaneH > 0)
   {
-    GlambdaH[0] = 0.0; /* Front bin doesn't see any field -> causality */
     for (icell = 1; icell < SelfFieldModel.Ncell; icell++)
     {
       Gn = 0.0;
-      for (k = icell - 1; k >= 0; k--)
+      for (k = icell; k >= 0; k--)
         Gn += dipoleH[k] * SelfFieldModel.Gh[icell - k];
-      GlambdaH[icell] = Gn + dipoleH[icell]*GlambdaH[0];
+      GlambdaH[icell] = 1*Gn;
     }    
     for (jp = 0; jp < bunch->Np; jp++)
       bunch->particles[jp].slope.x += -factG * GlambdaH[mapcell[jp]];
@@ -629,7 +626,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   
   //**********************************************************************************//
   
-  if(bunch->kb_out == 1 && rev%track.NrevMon == 0) /* Output potentials */
+  if(bunch->kb_out == 1 && (rev+1)%track.NrevMon == 0 && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan && track.EnablePotentials_out) /* Output potentials */
   {
     double rftest, taucell;
     const double dTau = SelfFieldModel.dT;
@@ -655,7 +652,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
         active += aHC->Vpeak/(ring->E0 * FGIGA) * sin(ring->wrf * aHC->nHC * taucell + aHC->phi_aHC + aHC->nHC * kb * 2 * M_PI);
       }
       ideal = FacI * sin(ring->m_aHC * ring->wrf * taucell + ring->m_aHC * ring->phi_n);
-      fprintf(fp, "\n %ld   %e   %e   %e    %e   %e   %e   %e   %e",rev, scan_val, taucell,  factG * GL1[icell], lr_wake[icell], rftest, active, ideal, fnp[icell]);
+      fprintf(fp, "\n %ld   %e   %e   %e    %e   %e   %e   %e   %e",rev+1, scan_val, taucell,  factG * GL1[icell], lr_wake[icell], rftest, active, ideal, fnp[icell]);
       if(SelfFieldModel.PlaneV > 0)
         fprintf(fp, "   %e   %e", -factG * GlambdaV[icell], dipoleV[icell]);
       if(SelfFieldModel.PlaneH > 0)

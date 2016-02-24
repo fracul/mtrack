@@ -293,13 +293,27 @@ weak_generate_bunch_distribution(weak_bunch_t * bunch,
 bool
 weak_writeout_bunch_distribution(const weak_bunch_t * bunch,
                                  const bunch_macroparticle_model_t bunchModel,
-                                 const plane_t iplane)
+                                 const plane_t iplane, int generated)
 {
   unsigned int jp;
-  FILE * fp = fopen(bunchModel.gendst_datafile[iplane], "w");
+  char distfname[FILENAME_MAX];
+
+  if (generated==0) {
+    unsigned int ns = 0;
+    unsigned int st = 0;
+    while (bunchModel.gendst_datafile[iplane][ns]!='\0') {
+      if (bunchModel.gendst_datafile[iplane][ns]=='/') st = 1*ns;
+      ns += 1;
+    }
+    strcpy(distfname,track.work_path);
+    strcat(distfname,bunchModel.gendst_datafile[iplane]+st);
+  }
+  else strcpy(distfname,bunchModel.gendst_datafile[iplane]);
+
+  FILE * fp = fopen(distfname, "w");
   if(fp == NULL)
   {
-    fprintf(stderr, "Error ! Cannot open %s\n", bunchModel.gendst_datafile[iplane]);
+    fprintf(stderr, "Error ! Cannot open %s\n", distfname);
     return false;
   }
      

@@ -338,6 +338,10 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     return false;
   
   config_get_fprint = false;
+  if(!config_get_long_int(fp, section, "NrevOutputStart", &(track->NrevOutputStart)))
+    track->NrevOutputStart = 0;
+  if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->NrevOutputStart)))
+    track->EnableRW_short_LON = 1;
   if(!config_get_int(fp, section, "triggerRW", &(track->triggerRW)))
     track->triggerRW = 0;
   if(!config_get_int(fp, section, "Nmlt", &(track->Nmlt)) && track->EnableRW_long)
@@ -345,6 +349,8 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   track->NmultiT = track->Nmlt+2;
   if(!config_get_int(fp, section, "EnableAmpinv_out", &(track->EnableAmpinv_out)))
     track->EnableAmpinv_out = 0;
+  if(!config_get_int(fp, section, "EnablePotentials_out", &(track->EnablePotentials_out)))
+    track->EnablePotentials_out = 1;
 
   int enable_resonators;
   if (!config_get_int(fp, section, "EnableResonators", &(enable_resonators)))
@@ -360,7 +366,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       fprintf(stderr, "ERROR: current_ration not between 0 and 1.\n");
       return false;
     }
-  } 
+  }
 
   /* [ring] - Beam and Machine Parameters */
   snprintf(section, 32, "ring");
@@ -405,6 +411,8 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   double tmp;
   /* Gzix -> normalized Chromaticity;  Cx not normalized */
   config_get_fprint = false; /* no error printing */
+  if(!config_get_int(fp, section, "mIdeal", &(ring->m_aHC)))
+    ring->m_aHC = 3;
   if(!config_get_double(fp, section, "Gzix", &(ring->Gzix)))
   {
     config_get_fprint = true; /* activate error printing */
@@ -473,14 +481,10 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     ring->beffV[1] = 0.0;
   }
   
-  if(track->EnableIdealHC == 1)
+  if(track->EnableIdealHC != 1)
   {
-//     if(!config_get_int(fp, section, "m_aHC", &(ring->m_aHC)));
-//       return false;
-    ring->m_aHC = 3;
-  }
-  else
     ring->m_aHC = 1;
+  }
   
   /* [ring] Optional parameters */
   config_get_fprint = false; /* no error printing */
@@ -1384,16 +1388,20 @@ bool setup_ring_parameters(ring_t * ring)
   /*** U0 : Energy Loss per Turn [keV]  ***/
   /*** Urad : Radiation Loss Term used in the tracking ***/
   /*** Longitudinal Damping Time etc. ***/ 
-  if (ring->U0 > 0 && ring->taue > 0) 
+  if (ring->U0 >= 0 && ring->taue >= 0) 
   {
     /* if (ring->Je > 0) 
       fprintf(stderr, "WARNING: Je is not take from input but calculated from given U0 and taue !\n"); */
     ring->Urad    = ring->U0 / (ring->E0 * FGIGA);
-    ring->Je      = 2 * ring->T0 / (ring->taue * ring->Urad);
-    ring->De      = ring->Urad * ring->Je;
+    if (ring->Urad!=0) {
+      if (ring->Je < 0)
+	ring->Je      = 2 * ring->T0 / (ring->taue * ring->Urad);
+      if (ring->rho0 < 0)
+	ring->rho0    = Cg * ring->E0 * ring->E0 * ring->E0 * ring->E0 * FGIGA / ring->U0;
+    }
+    ring->De      = 2*ring->T0/(ring->taue);
     ring->tauC    = ring->Je * ring->taue;
     ring->aexpe   = 1.0 / ring->taue;
-    ring->rho0    = Cg * ring->E0 * ring->E0 * ring->E0 * ring->E0 * FGIGA / ring->U0;
   }
   else
   {
@@ -1405,11 +1413,11 @@ bool setup_ring_parameters(ring_t * ring)
     ring->De      = 2.0 * ring->aexpe * ring->T0;
   }
   
-  ring->q       = FMEGA * ring->Vrf0 / ring->U0;
-  ring->Fq      = 2.0*(sqrt(ring->q * ring->q - 1.0) - acos(1.0 / ring->q));
+  ring->q       = ring->U0 / ring->Vrf0 / FMEGA ;
+  ring->Fq      = 2.0*(sqrt(1.0 /ring->q / ring->q - 1.0) - acos(ring->q));
   ring->epsMax  = ring->U0 / (M_PI * ring->ac * ring->h * ring->E0 * FGIGA) * ring->Fq;
   ring->epsMax  = sqrt(ring->epsMax);  
-  ring->Vrfp    = FMEGA * ring->Vrf0 * ring->wrf * sqrt(1.0 - 1.0/(ring->q * ring->q));
+  ring->Vrfp    = FMEGA * ring->Vrf0 * ring->wrf * sqrt(1.0 - ring->q * ring->q);
   ring->wso     = sqrt(fabs(ring->ac) * ring->Vrfp / ( ring->T0 * ring->E0 * FGIGA));
   ring->wso2    = ring->wso * ring->wso;
   ring->fso     = ring->wso / (2.0 * M_PI);
@@ -1418,8 +1426,8 @@ bool setup_ring_parameters(ring_t * ring)
   ring->wgziV   = ring->QV0 * ring->w0 * ring->Gziz / ring->ac;
 
 
-  ring->sn0     = 1.0 / ring->q;
-  ring->phai0   = asin(1.0 / ring->q);
+  ring->sn0     = ring->q;
+  ring->phai0   = asin( ring->q );
   ring->fc1     = ring->ac / ring->wso;
   ring->fc12    = pow(ring->fc1, 2);
 
@@ -1444,8 +1452,8 @@ bool setup_ring_parameters(ring_t * ring)
   for(i = 1; i <= ring->longrange_resonators_size; i++)
   {
     LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
-    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);
-    else genphase = atan(lr_resonator->Qfactor * ( lr_resonator->wr/ring->wrf - ring->wrf/lr_resonator->wr ));
+    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+    else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
     lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
@@ -1458,7 +1466,7 @@ bool setup_ring_parameters(ring_t * ring)
     if (lr_resonator->Nbu > Ntmp)
       Ntmp = lr_resonator->Nbu;
   }
-  ring->phai0 = asin(mult / ring->q)-genphase/2;
+  ring->phai0 = asin(mult * ring->q) - genphase/2.0;
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
 
@@ -1472,13 +1480,13 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
 {
   if(track->EnableIdealHC == 1)
   {
-    ring->phai0 = asin(ring->m_aHC*ring->m_aHC /(ring->m_aHC*ring->m_aHC - 1.) / ring->q);
+    ring->phai0 = asin(ring->m_aHC*ring->m_aHC /(ring->m_aHC*ring->m_aHC - 1.) * ring->q);
     ring->phi_n = atan(tan(ring->phai0) / (double) ring->m_aHC) / (double) ring->m_aHC;
     if (ring->ac<0) {
       ring->phai0 = M_PI-ring->phai0;
       ring->phi_n = M_PI-ring->phi_n;
     }
-    ring->HC_k = -cos(ring->phai0) / (ring->m_aHC * cos(ring->m_aHC * ring->phi_n));
+    ring->HC_k = -cos(ring->phai0) / (ring->m_aHC * cos(ring->m_aHC * ring->phi_n));  
   }
   if(track->scan == 1)
     { //TODO: Chroma scan
@@ -1554,10 +1562,10 @@ bool macrop_model_setup_parameters(const ring_t ring, const tracking_t tracking,
   
   /* beam parameters */
   
-  if(tracking.TrackPlane[LON] && macrop_model->sgm_xtau < 0.0)
-    macrop_model->sgm_xtau = FGIGA * fabs(ring.ac) * ring.Gamma / ring.wso * sqrt(Cq/(ring.Je * ring.rho0));
   if(tracking.TrackPlane[LON] && macrop_model->sgm_xeps < 0.0)
     macrop_model->sgm_xeps = sqrt(Cq * ring.Gamma2 / (ring.Je * ring.rho0));
+  if(tracking.TrackPlane[LON] && macrop_model->sgm_xtau < 0.0)
+    macrop_model->sgm_xtau = FGIGA * fabs(ring.ac) / ring.wso * macrop_model->sgm_xeps;
 
   if(macrop_model->sgm_xx < 0.0)
     macrop_model->sgm_xx = FKILO*sqrt(ring.emittanceH/FGIGA *  ring.beta1[HOR]);

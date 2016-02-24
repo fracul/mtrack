@@ -157,18 +157,20 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     worker_weak_stat_output(bstats_fp, bstats, bunch.Ib);
     weak_bunch_reset_statistics(bstats);
     
-    char filename_trafo[FILENAME_MAX] = "";
-    snprintf(filename_trafo, FILENAME_MAX, "%s/potentials_bunch_%d.dat", track.work_path, kb);  
-    trafo_fp = fopen(filename_trafo, "w+");
-    if(trafo_fp == NULL)
-      ERROR("fopen_potentials_bunch0", return);
-    fprintf(trafo_fp, " # potentials and distributions, Ib = %g A ;\n", bunch.Ib);
-    fprintf(trafo_fp, " # rev  scan_val         tau         LON_wake_pot       HC_pot        rf_pot      active_cav      ideal_HC        bunch_shape");
-    if(SelfFieldModel.PlaneV > 0)
-      fprintf(trafo_fp, "     VER_wake_pot     VER_dipole_mom");
-    if(SelfFieldModel.PlaneH > 0)
-      fprintf(trafo_fp, "     HOR_wake_pot     HOR_dipole_mom");
-    fprintf(trafo_fp, "\n");
+    if (track.EnablePotentials_out) {
+      char filename_trafo[FILENAME_MAX] = "";
+      snprintf(filename_trafo, FILENAME_MAX, "%s/potentials_bunch_%d.dat", track.work_path, kb);  
+      trafo_fp = fopen(filename_trafo, "w+");
+      if(trafo_fp == NULL)
+	ERROR("fopen_potentials_bunch0", return);
+      fprintf(trafo_fp, " # potentials and distributions, Ib = %g A ;\n", bunch.Ib);
+      fprintf(trafo_fp, " # rev  scan_val         tau         LON_wake_pot       HC_pot        rf_pot      active_cav      ideal_HC        bunch_shape");
+      if(SelfFieldModel.PlaneV > 0)
+	fprintf(trafo_fp, "     VER_wake_pot     VER_dipole_mom");
+      if(SelfFieldModel.PlaneH > 0)
+	fprintf(trafo_fp, "     HOR_wake_pot     HOR_dipole_mom");
+      fprintf(trafo_fp, "\n");
+    }
   }
   
   /* Counting turns for statistics */
@@ -201,7 +203,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     if(bunch.kb_out == 1)
     {
       Nstat++;    
-      if(Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)  
+      if((Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0) && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)
       { /* Outputfile ampinv and bunch stats */
       weak_bunch_update_statistics(bstats, Nstat);
       bunch_stats_fprintf(bstats_fp, rev, bstats, scan_val);
@@ -232,7 +234,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     MPI_Send(&(bstats->slope_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);
     
     /* Calc and send more statistics to manager, every NrevMon turn if ampinv is outputed */
-    if(rev%(track.NrevMon) == 0)// && track.EnableAmpinv_out)
+    if((rev+1)%(track.NrevMon) == 0 && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)// && track.EnableAmpinv_out)
     { 
       weak_bunch_calc_ampinv(&bunch, &track);
       MPI_Send(&(bstats->ampinv), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);
@@ -295,12 +297,11 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   if(bunch.kb_out == 1)
   {
   /* Writeout distribution of first bunch */
-    if(bunchModel.nGen[LON])
-      weak_writeout_bunch_distribution(&bunch, bunchModel, LON);
-    if(track.TrackPlane[HOR] && bunchModel.nGen[HOR])
-      weak_writeout_bunch_distribution(&bunch, bunchModel, HOR);
-    if(track.TrackPlane[VER] && bunchModel.nGen[VER])
-      weak_writeout_bunch_distribution(&bunch, bunchModel, VER);
+    weak_writeout_bunch_distribution(&bunch, bunchModel, LON, bunchModel.nGen[LON]);
+    if(track.TrackPlane[HOR])
+      weak_writeout_bunch_distribution(&bunch, bunchModel, HOR, bunchModel.nGen[HOR]);
+    if(track.TrackPlane[VER]) 
+      weak_writeout_bunch_distribution(&bunch, bunchModel, VER, bunchModel.nGen[VER]);
 
     if(track.EnableRW_long)
     {
@@ -324,7 +325,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       fclose(hist_dipole_fp);
     }
     fclose(bstats_fp);
-    fclose(trafo_fp); 
+    if (trafo_fp!=NULL) fclose(trafo_fp); 
   }
   
   if(ebeam.nfFill[kb] && (bunch.N_trash_low != 0 || bunch.N_trash_high != 0))

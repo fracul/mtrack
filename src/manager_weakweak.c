@@ -203,7 +203,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       MPI_Recv(&(bstats->slope_sigma), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
       
       /* Every NrevMon turn, recieve more statistics */
-      if(rev%(track.NrevMon) == 0)// && track.EnableAmpinv_out)
+      if((rev+1)%(track.NrevMon) == 0 && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)// && track.EnableAmpinv_out)
       {
         const long int irevmon = rev/track.NrevMon;
         MPI_Recv(&(CMhist.ampinv[irevmon * ebeam.Nbunch + kb]), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
@@ -225,7 +225,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
         }
     }
     
-    if(Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)
+    if((Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0) && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)
     { /* Outputfile ampinv and bunch stats */
     Nstat *= ebeam.Nbunch;
     weak_bunch_update_statistics(&allstats, Nstat);
@@ -273,6 +273,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       
       fprintf(bstats_end_fp, " %d     %e    %e    %e    %e\n", kb, bstats->pos.xtau, bstats->pos_sigma.xtau, bstats->slope.xtau, bstats->slope_sigma.xtau);
     }
+    fclose(bstats_end_fp);
   }
   
   /* Writeout ampinv history */

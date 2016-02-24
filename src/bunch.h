@@ -218,7 +218,7 @@ weak_generate_bunch_distribution(weak_bunch_t * bunch,
 bool
 weak_writeout_bunch_distribution(const weak_bunch_t * bunch,
                                  const bunch_macroparticle_model_t bunchModel,
-                                 const plane_t iplane);
+                                 const plane_t iplane,int generated);
 
 
 /**
