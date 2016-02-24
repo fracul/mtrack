@@ -340,7 +340,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   config_get_fprint = false;
   if(!config_get_long_int(fp, section, "NrevOutputStart", &(track->NrevOutputStart)))
     track->NrevOutputStart = 0;
-  if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->NrevOutputStart)))
+  if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->EnableRW_short_LON)))
     track->EnableRW_short_LON = 1;
   if(!config_get_int(fp, section, "triggerRW", &(track->triggerRW)))
     track->triggerRW = 0;
