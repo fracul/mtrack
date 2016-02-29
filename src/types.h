@@ -130,7 +130,7 @@ typedef struct tracking
   int TrackPlane[3];
   long int NrevTot; /**< Total number of revolutions */
   long int NrevMon; /**< Turn interval between beam diagnostics */
-  long int NrevOutputStart; /**< Start turn for writing output */
+  long int NrevPotentialsOut; /**< Start turn for writing potentials to output */
   
   model_t BunchModel; /** Flag for bunch models, MODEL_WEAK = 0, MODEL_STRONG = 1 */
   
@@ -140,7 +140,6 @@ typedef struct tracking
   int EnableFBII; /**< Activate the fast beam ion interaction */
   int EnableQuantum; /**< Activate quantume excitation and radiation damping */
   int EnableAmpinv_out; /**< Activate output of the amplitude-invariant every NrevMon turns */
-  int EnablePotentials_out; /**< Activate output of the wakefield and cavity potentials every NrevMon turns */
   int EnableActiveHC; /**< Activate active harmonic cavity in optics transformation */
   int EnableIdealHC;
   int EnableDiffCurr;

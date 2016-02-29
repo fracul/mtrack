@@ -157,7 +157,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     worker_weak_stat_output(bstats_fp, bstats, bunch.Ib);
     weak_bunch_reset_statistics(bstats);
     
-    if (track.EnablePotentials_out) {
+    if (track.NrevPotentialsOut<=track.NrevTot) {
       char filename_trafo[FILENAME_MAX] = "";
       snprintf(filename_trafo, FILENAME_MAX, "%s/potentials_bunch_%d.dat", track.work_path, kb);  
       trafo_fp = fopen(filename_trafo, "w+");
@@ -203,7 +203,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     if(bunch.kb_out == 1)
     {
       Nstat++;    
-      if((Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0) && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)
+      if (Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)
       { /* Outputfile ampinv and bunch stats */
       weak_bunch_update_statistics(bstats, Nstat);
       bunch_stats_fprintf(bstats_fp, rev, bstats, scan_val);
@@ -234,7 +234,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     MPI_Send(&(bstats->slope_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);
     
     /* Calc and send more statistics to manager, every NrevMon turn if ampinv is outputed */
-    if((rev+1)%(track.NrevMon) == 0 && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan)// && track.EnableAmpinv_out)
+    if((rev+1)%(track.NrevMon) == 0)// && track.EnableAmpinv_out)
     { 
       weak_bunch_calc_ampinv(&bunch, &track);
       MPI_Send(&(bstats->ampinv), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);

@@ -338,8 +338,8 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     return false;
   
   config_get_fprint = false;
-  if(!config_get_long_int(fp, section, "NrevOutputStart", &(track->NrevOutputStart)))
-    track->NrevOutputStart = 0;
+  if(!config_get_long_int(fp, section, "NrevPotentialsOut", &(track->NrevPotentialsOut)))
+    track->NrevPotentialsOut = 0;
   if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->EnableRW_short_LON)))
     track->EnableRW_short_LON = 1;
   if(!config_get_int(fp, section, "triggerRW", &(track->triggerRW)))
@@ -349,8 +349,6 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   track->NmultiT = track->Nmlt+2;
   if(!config_get_int(fp, section, "EnableAmpinv_out", &(track->EnableAmpinv_out)))
     track->EnableAmpinv_out = 0;
-  if(!config_get_int(fp, section, "EnablePotentials_out", &(track->EnablePotentials_out)))
-    track->EnablePotentials_out = 1;
 
   int enable_resonators;
   if (!config_get_int(fp, section, "EnableResonators", &(enable_resonators)))

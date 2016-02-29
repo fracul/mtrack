@@ -626,7 +626,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   
   //**********************************************************************************//
   
-  if(bunch->kb_out == 1 && (rev+1)%track.NrevMon == 0 && rev+1>=track.NrevOutputStart+(rev/track.NrevScan)*track.NrevScan && track.EnablePotentials_out) /* Output potentials */
+  if(bunch->kb_out == 1 && (rev+1)%track.NrevMon == 0 && rev+1>=track.NrevPotentialsOut+(rev/track.NrevScan)*track.NrevScan) /* Output potentials */
   {
     double rftest, taucell;
     const double dTau = SelfFieldModel.dT;
