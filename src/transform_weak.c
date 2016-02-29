@@ -403,7 +403,7 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
     double ARW = sqrt(Z_0 / (sigmarw*C_LIGHT*pi)) / (4*beffL1*pi) * ring->Lc;   
     for(nc=1; nc<ncellmax; nc++) 
     {
-      double tRW    = nc*t_const;
+      double tRW    = (nc+0.5)*t_const;
       SelfFieldModel->Gl[nc] -= ARW/(tRW*sqrt(tRW));     
     }
     double * RW0_val;
