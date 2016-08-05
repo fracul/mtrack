@@ -20,8 +20,13 @@ LIBS=-lm
 
 WEAKWEAK_OBJECTS=manager_weakweak.o worker_weakweak.o bunch_weak.o transform_weak.o cyclic_array.o
 WEAKSTRONG_OBJECTS=manager_weakstrong.o worker_weakstrong.o bunch_strong.o fbi_weakstrong.o rw_weakstrong.o
+WEAKWEAK_OBJECTS_CUDA=manager_weakweak_cuda.o worker_weakweak_cuda.o
+WEAKWEAK_OBJECTS_NVCC=transform_weak_cuda.o
 
 all : ../mbtrack-mpi
+
+cuda : CFLAGS += -lcuda -lcudart -lcurand -DMBTRACK_CUDA	
+cuda : ../mbtrack-cuda
 
 debug : MPICC += -DDEBUG -DDEBUG_FLOATING_POINT -g
 debug : CFLAGS = -Wall -Wextra -O0
@@ -40,6 +45,9 @@ test : test_complexerrf test_cyclic_array test_histogram test_input test_reglin 
 #===========================================================================
 
 ../mbtrack-mpi : mbtrack-mpi.o confmpi.o input.o test.o ${WEAKWEAK_OBJECTS} ${WEAKSTRONG_OBJECTS} bunch.o stats.o physic.o statistics.o tracking.o rw_table.o
+	${MPICC} $(CFLAGS) $^ -o $@ $(LIBS)
+
+../mbtrack-cuda : mbtrack-mpi-cuda.o confmpi.o input.o test.o ${WEAKWEAK_OBJECTS} ${WEAKSTRONG_OBJECTS} ${WEAKWEAK_OBJECTS_NVCC} ${WEAKWEAK_OBJECTS_CUDA}  bunch.o stats.o physic.o statistics.o tracking.o rw_table.o transform_weak_cuda.o
 	${MPICC} $(CFLAGS) $^ -o $@ $(LIBS)
 
 ../mbtrack-mpi-debug : mbtrack-mpi.o confmpi.o input.o test.o ${WEAKWEAK_OBJECTS} ${WEAKSTRONG_OBJECTS} bunch.o stats.o physic.o statistics.o tracking.o  rw_table.o
@@ -73,6 +81,10 @@ test_weak_bunch: test.o test_weak_bunch.o bunch_weak.o bunch.o bunch_strong.o st
 # objects building
 %.o: %.c
 	$(MPICC) -c $(CFLAGS) $< -o $@
+
+# cuda building
+%.o: %.cu
+	nvcc -c $(CUDAFLAGS) $< -o $@
 
 # clean target
 clean:

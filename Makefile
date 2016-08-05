@@ -1,5 +1,7 @@
 all: mbtrack-mpi
 
+cuda : mbtrack-cuda
+
 debug: mbtrack-mpi-debug
 
 clean:
@@ -8,6 +10,9 @@ clean:
 
 mbtrack-mpi: FORCE
 	cd src/; $(MAKE)
+
+mbtrack-cuda: FORCE
+	cd src/; $(MAKE) cuda
 
 mbtrack-mpi-debug: FORCE
 	cd src/; $(MAKE) debug
