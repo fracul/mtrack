@@ -229,10 +229,14 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
   transfer_ebeam(&ebeam);
   transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
-  initialize_cyclic_array_cuda(dipole_RW);
-  for (kb = 0; kb < ebeam.Nbunch; kb++)
+
+  if (track.EnableRW_long > 0)
+    initialize_cyclic_array_cuda(dipole_RW);
+
+  for (kb = 0; kb < ebeam.Nbunch; kb++) {
     allocate_bunch(&bunches[kb], kb);
-  
+    transfer_bunch_to_device(&bunches[kb], kb);
+  }
 
   printf("DEBUG: tracking %d bunches for %d turns\n", ebeam.Nbunch, track.NrevTot);
 
@@ -251,13 +255,15 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
 
     //transfer bunch to device
-    for (kb = 0; kb < ebeam.Nbunch; kb++)
-      transfer_bunch_to_device(&bunches[kb], kb);
+    //for (kb = 0; kb < ebeam.Nbunch; kb++)
+    //  transfer_bunch_to_device(&bunches[kb], kb);
 
     if (ring.longrange_resonators_size > 0) {
-      for (kb = 0; kb < ebeam.Nbunch; kb++) {
+      for (kb = 0; kb < ebeam.Nbunch; kb++)
 	fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
-      }
+
+      for (kb = 0; kb < ebeam.Nbunch; kb++)
+	construct_wake_phasor_cuda(Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
     }
 
     for (kb = 0; kb < ebeam.Nbunch; kb++)
@@ -283,6 +289,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       //transfer bunch back from device
       transfer_bunch_from_device(&bunches[kb], kb);
     }
+    sync_device();
     /* end tracking for one bunch */
 
     /* Update the statistics every turn */
@@ -317,8 +324,9 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	mom[0] = bstats->pos.x;
 	mom[1] = bstats->pos.z;
       }
+      update_cyclic_array_cuda(&dipole_RW);
     }
-    update_cyclic_array_cuda(&dipole_RW);
+    
 
     /* TODO include interbunch (long-range resistive-wall interactions */
     if (track.EnableRW_long) {
@@ -332,6 +340,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	//transfer bunch back from device
 	transfer_bunch_from_device(&bunches[kb], kb);
       }
+      sync_device();
       m++;
     }
 

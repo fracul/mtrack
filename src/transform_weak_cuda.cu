@@ -64,6 +64,9 @@ double *hIbunch;
 double *ddipole_RW;
 double *dwake_voltage;
 
+cudaStream_t stream1; 
+cudaStream_t stream2;
+
 __global__ void kernelInitRandoms(curandState *state, int size, int seed) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < size)
@@ -383,11 +386,14 @@ __global__ void kernelGetMinMax(int *fnp) {
 }
 
 //from icellmin + 1, to icellmax + 1, before that zero GL1
-__global__ void kernelWakePotential(int ncell, int icellmin, int icellmax, double *GL1, int *fnp,
+__global__ void kernelWakePotential(int ncell, double *GL1, int *fnp,
 				    double *SelfFieldGl)
 {
-  int icell = blockIdx.x * blockDim.x + threadIdx.x + icellmin;// + 1;
-
+  int icellmin = dcellmin;
+  int icellmax = dcellmax;
+  //int icell = blockIdx.x * blockDim.x + threadIdx.x + icellmin;// + 1;
+  int icell = blockIdx.x * blockDim.x + threadIdx.x;
+  
   //load fnp and SelfField.Gl to shared memory
   extern __shared__ double smem[];
   double * s_Gl = (double*)smem;
@@ -402,7 +408,7 @@ __global__ void kernelWakePotential(int ncell, int icellmin, int icellmax, doubl
   //make sure all threads complete shared memory load before continue
   __syncthreads();
 
-  if (icell < ncell) {
+  if (icell < ncell && icell > icellmin) {
     double l_GL1 = 0.0;
 
     /***  Contribution of BBR impedances  ***/
@@ -809,6 +815,11 @@ void setup_cuda(int nbunches, int np, int ncell, double *fnp_ring) {
   cudaGetDeviceCount(&ndevices);
   cudaSetDevice(ndevices - 1);
 
+  cudaStreamCreate(&stream1);
+  cudaStreamCreate(&stream2);
+  cudaError_t es = cudaGetLastError();
+  fprintf(stderr, "Error: %s\n", cudaGetErrorString(es));
+
   //create device pointer for each bunch
   d_particles = new particle_t*[nbunches];
 
@@ -883,6 +894,10 @@ void free_cuda() {
   cudaFree(dlr_wake);
 
   cudaFree(dmapcell);
+
+  //destryo cuda stream
+  cudaStreamDestroy(stream1);
+  cudaStreamDestroy(stream2);
 }
 
 void free_bunch(weak_bunch_t * bunch, int kb) {
@@ -903,11 +918,23 @@ void transfer_bunch_to_device(weak_bunch_t * bunch, int kb) {
 }
 
 void transfer_bunch_from_device(weak_bunch_t * bunch, int kb) {
+  
   cudaError_t e;
-  e = cudaMemcpy(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
-		 cudaMemcpyDeviceToHost); 
+  
+  //e = cudaMemcpy(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
+//		 cudaMemcpyDeviceToHost); 
+  
+  e = cudaMemcpyAsync(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
+		      cudaMemcpyDeviceToHost, stream1);
   if (e != cudaSuccess)
-    fprintf(stderr, "Error ! CUDA bunch from device failed\n");
+    fprintf(stderr, "Error ! CUDA bunch from device failed: %s\n", cudaGetErrorString(e));
+  
+  
+
+}
+
+void sync_device() {
+  cudaDeviceSynchronize();
 }
 
 int
@@ -963,6 +990,35 @@ fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFie
 }
 
 int
+construct_wake_phasor_cuda(int Np, int Ncell, int kb, int resonators)
+{
+
+  cudaError_t err;
+
+  int offset = kb * Ncell;
+  int bytes = Ncell * sizeof(double);
+  int bytes_int = Ncell * sizeof(int);
+  
+  cudaMemsetAsync(&dlr_wake[offset], 0, bytes, stream2);
+
+  //construct_wake_phasor
+  if(resonators > 0) {
+    int offset_phasor = kb * 2 * resonators;
+    int smem_size = bytes + bytes_int;
+    kernelConstructWakePhasor<<<resonators, 128, smem_size, stream2>>>(&dphasor_end[offset_phasor], 
+								       &dlr_wake[offset], 
+								       dfnp_ring, Np, kb, 
+								       Ncell);
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess)
+      fprintf(stderr, "Error ! CUDA error construct wake phaseor!\n");
+  }
+
+  return 1;
+}
+
+int
 transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
 				    int kb, FILE *fp, int rev, double scan_val, int resonators) 
 {
@@ -974,19 +1030,20 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   int bytes_int = SelfFieldModel.Ncell * sizeof(int);
 
   //reset temporary GPU memory
-  cudaMemset(&dfnp[offset], 0, bytes_int);
-  cudaMemset(&ddipoleV[offset], 0, bytes);
-  cudaMemset(&ddipoleH[offset], 0, bytes);
-  cudaMemset(&dGL1[offset], 0, bytes);
-  cudaMemset(&dGlambdaV[offset], 0, bytes);
-  cudaMemset(&dGlambdaH[offset], 0, bytes);
-  cudaMemset(&dlr_wake[offset], 0, bytes);
+  cudaMemsetAsync(&dfnp[offset], 0, bytes_int, stream2);
+  cudaMemsetAsync(&ddipoleV[offset], 0, bytes, stream2);
+  cudaMemsetAsync(&ddipoleH[offset], 0, bytes, stream2);
+  cudaMemsetAsync(&dGL1[offset], 0, bytes, stream2);
+  cudaMemsetAsync(&dGlambdaV[offset], 0, bytes, stream2);
+  cudaMemsetAsync(&dGlambdaH[offset], 0, bytes,stream2);
+  //cudaMemsetAsync(&dlr_wake[offset], 0, bytes, stream2);
 
   //assign each particle a bin
   int smem_size = 0;
   int threads = 128;
   int blocks = bunch->Np / threads + 1;
-  kernelAssignBin<<<blocks, threads>>>(d_particles[kb], dmapcell, bunch->Np, SelfFieldModel.Ncell);
+  kernelAssignBin<<<blocks, threads, 0, stream2>>>(d_particles[kb], dmapcell, bunch->Np, 
+						   SelfFieldModel.Ncell);
 
   err = cudaGetLastError();
   if (err != cudaSuccess)
@@ -997,89 +1054,89 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   blocks = bunch->Np / threads + 1;
   smem_size = 2 * bytes + bytes_int;
 
-  cudaMemset(&dfnp[kb * SelfFieldModel.Ncell], 0, bytes_int);
-  cudaMemset(&ddipoleV[kb * SelfFieldModel.Ncell], 0, bytes);
-  cudaMemset(&ddipoleH[kb * SelfFieldModel.Ncell], 0, bytes);
-
-  kernelCountBinAtomic<<<blocks, threads, smem_size >>>(d_particles[kb], 
-							&ddipoleV[kb * SelfFieldModel.Ncell], 
-							&ddipoleH[kb * SelfFieldModel.Ncell], 
-							&dfnp[kb * SelfFieldModel.Ncell], 
-							dmapcell, bunch->Np, SelfFieldModel.Ncell,
-							bunch->Np / blocks);
+  kernelCountBinAtomic<<<blocks, threads, smem_size, stream2 >>>(d_particles[kb], 
+								 &ddipoleV[offset], 
+								 &ddipoleH[offset], 
+								 &dfnp[offset], 
+								 dmapcell, bunch->Np, 
+								 SelfFieldModel.Ncell,
+								 bunch->Np / blocks);
   
   err = cudaGetLastError();
   if (err != cudaSuccess)
     fprintf(stderr, "Error ! CUDA error count bins!\n");
-
 
   //find min and max bins with particles
   threads = 128;
   blocks = 1;
   //smem_size = threads * sizeof(double);
   smem_size = bytes_int;
-  kernelGetMinMax<<<blocks, threads, smem_size>>>(&dfnp[kb * SelfFieldModel.Ncell]);
+  kernelGetMinMax<<<blocks, threads, smem_size, stream2>>>(&dfnp[offset]);
  
-  int imin, imax;
-  cudaMemcpyFromSymbol(&imin, dcellmin, sizeof(int)); 
-  cudaMemcpyFromSymbol(&imax, dcellmax, sizeof(int));
+  //int imin, imax;
+  //cudaMemcpyFromSymbol(&imin, dcellmin, sizeof(int)); 
+  //cudaMemcpyFromSymbol(&imax, dcellmax, sizeof(int));
+  //cudaMemcpyFromSymbolAsync(&imin, dcellmin, sizeof(int), cudaMemcpyDeviceToHost, stream2); 
+  //cudaMemcpyFromSymbolAsync(&imax, dcellmax, sizeof(int), cudaMemcpyDeviceToHost, stream2);
 
   //get the effects of wake potentials on LON plane
   //simultaniously
   threads = 128;
   //blocks = (imax - imin) / threads + 1;
-  blocks = (SelfFieldModel.Ncell - imin) / threads + 1;
+  //blocks = (SelfFieldModel.Ncell - imin) / threads + 1;
+  blocks = SelfFieldModel.Ncell / threads + 1;
   smem_size = bytes_int + bytes;
-  kernelWakePotential<<<blocks, threads, smem_size>>>(SelfFieldModel.Ncell, imin, imax, 
-						      &dGL1[kb * SelfFieldModel.Ncell],
-						      &dfnp[kb * SelfFieldModel.Ncell], 
-						      dSelfFieldGl);
+  kernelWakePotential<<<blocks, threads, smem_size, stream2>>>(SelfFieldModel.Ncell, 
+							       &dGL1[offset], &dfnp[offset], 
+							       dSelfFieldGl);
 
   //calc the effects of wake potentials on VER and HOR planes
   threads = 128;
   blocks = (SelfFieldModel.Ncell - 1) / threads + 1;
   smem_size = 2 * SelfFieldModel.Ncell * sizeof(double);
   if (SelfFieldModel.PlaneV > 0)
-    kernelWakePotentialPlanesVH<<<blocks, threads, smem_size>>>(&dGlambdaV[kb * SelfFieldModel.Ncell], 
-								&ddipoleV[kb * SelfFieldModel.Ncell],
-								dSelfFieldGl,
-								SelfFieldModel.Ncell);
+    kernelWakePotentialPlanesVH<<<blocks, threads, smem_size, stream2>>>(&dGlambdaV[offset], 
+									 &ddipoleV[offset],
+									 dSelfFieldGl,
+									 SelfFieldModel.Ncell);
   if (SelfFieldModel.PlaneH > 0)
-    kernelWakePotentialPlanesVH<<<blocks, threads, smem_size>>>(&dGlambdaH[kb * SelfFieldModel.Ncell], 
-								&ddipoleH[kb * SelfFieldModel.Ncell],
-								dSelfFieldGl,
-								SelfFieldModel.Ncell);
+    kernelWakePotentialPlanesVH<<<blocks, threads, smem_size, stream2>>>(&dGlambdaH[offset], 
+									 &ddipoleH[offset],
+									 dSelfFieldGl,
+									 SelfFieldModel.Ncell);
 
   err = cudaGetLastError();
   if (err != cudaSuccess)
     fprintf(stderr, "Error ! CUDA error wake potentials!\n");
 
+  /*
   //construct_wake_phasor
   if(resonators > 0) {
     int offset_phasor = kb * 2 * resonators;
     smem_size = bytes + bytes_int;
-    kernelConstructWakePhasor<<<resonators, 128, smem_size>>>(&dphasor_end[offset_phasor], 
-							      &dlr_wake[offset], 
-							      dfnp_ring, 
-							      bunch->Np, kb, SelfFieldModel.Ncell);
+    kernelConstructWakePhasor<<<resonators, 128, smem_size, stream2>>>(&dphasor_end[offset_phasor], 
+								       &dlr_wake[offset], 
+								       dfnp_ring, bunch->Np, kb, 
+								       SelfFieldModel.Ncell);
 
     err = cudaGetLastError();
     if (err != cudaSuccess)
       fprintf(stderr, "Error ! CUDA error construct wake phaseor!\n");
   }
+  */
 
 
   //apply effects of wake potentials to particles
   threads = 128;
   blocks = bunch->Np / threads + 1;
   smem_size = 4 * SelfFieldModel.Ncell * sizeof(double);
-  kernelWakePotentialEffect<<<blocks, threads, smem_size>>>(d_particles[kb], dmapcell, 
-							    &dGL1[kb * SelfFieldModel.Ncell],
-							    &dGlambdaV[kb * SelfFieldModel.Ncell],
-							    &dGlambdaH[kb * SelfFieldModel.Ncell],
-							    &dlr_wake[kb * SelfFieldModel.Ncell],
-							    bunch->Ib, kb, bunch->Np,
-							    SelfFieldModel.Ncell);
+  kernelWakePotentialEffect<<<blocks, threads, smem_size, stream2>>>(d_particles[kb], dmapcell, 
+								     &dGL1[offset],
+								     &dGlambdaV[offset],
+								     &dGlambdaH[offset],
+								     &dlr_wake[offset],
+								     bunch->Ib, kb, bunch->Np,
+								     SelfFieldModel.Ncell);
 
   cudaError_t e1 = cudaGetLastError();
   if (e1 != cudaSuccess)
@@ -1104,14 +1161,14 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
     memset(GlambdaH, 0.0, sizeof(GlambdaH));
     memset(lr_wake, 0.0, sizeof(lr_wake));   
 
-    cudaMemcpy(fnp, &dfnp[offset], bytes_int, cudaMemcpyDeviceToHost);
-    cudaMemcpy(fnp_ring, &dfnp_ring[offset], bytes_int, cudaMemcpyDeviceToHost);
-    cudaMemcpy(GL1, &dGL1[offset], bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(dipoleV, &ddipoleV[offset], bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(GlambdaV, &dGlambdaV[offset], bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(dipoleH, &ddipoleH[offset], bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(GlambdaH, &dGlambdaH[offset], bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(lr_wake, &dlr_wake[offset], bytes, cudaMemcpyDeviceToHost);    
+    cudaMemcpyAsync(fnp, &dfnp[offset], bytes_int, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(fnp_ring, &dfnp_ring[offset], bytes_int, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(GL1, &dGL1[offset], bytes, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(dipoleV, &ddipoleV[offset], bytes, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(GlambdaV, &dGlambdaV[offset], bytes, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(dipoleH, &ddipoleH[offset], bytes, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(GlambdaH, &dGlambdaH[offset], bytes, cudaMemcpyDeviceToHost, stream2);
+    cudaMemcpyAsync(lr_wake, &dlr_wake[offset], bytes, cudaMemcpyDeviceToHost, stream2);    
 
     int icell;  
     double sgm_xtau = SelfFieldModel.sigma_tau; /* [s] */
@@ -1158,7 +1215,7 @@ void initialize_cyclic_array_cuda(cyclic_array_t dipole_RW) {
 
   
   int bytes = dipole_RW.m * dipole_RW.n * sizeof(double);
-
+  
   cudaError_t e1, e2, e3, e4;
   e1 = cudaMalloc( (void**) &ddipole_RW, bytes);
   e2 = cudaHostRegister( dipole_RW.arr, bytes, cudaHostRegisterPortable);

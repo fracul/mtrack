@@ -45,6 +45,9 @@ void
 allocate_bunch(weak_bunch_t * bunch, int kb);
 
 void 
+sync_device();
+
+void 
 free_cuda();
 
 void 
@@ -59,6 +62,9 @@ transfer_bunch_from_device(weak_bunch_t * bunch, int kb);
 void 
 fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
 		     int kb);
+
+int
+construct_wake_phasor_cuda(int Np, int Ncell, int kb, int resonators);
 
 int 
 transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
