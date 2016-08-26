@@ -6,9 +6,15 @@
 #ifndef TRANSFORM_WEAK_CUDA_H
 #define TRANSFORM_WEAK_CUDA_H
 
+
+
 #include "types.h"
 #include "bunch.h"
 
+
+//#include <thrust/device_vector.h>
+//#include <thrust/sort.h>
+//#include <thrust/count.h>
 
 /**
  * Optical transformation (for all planes) of a bunch (weak model)
@@ -27,7 +33,13 @@ void
 transfer_bunch(weak_bunch_t * bunch, int kb);
 
 void
-setup_cuda(int nbunches, int np, int ncell);
+transfer_ebeam(const e_beam_t *ebeam);
+
+void 
+transfer_phasor(int nbunches, int resonators, double *phasor_end);
+
+void
+setup_cuda(int nbunches, int np, int ncell, double *fnp_ring);
 
 void 
 allocate_bunch(weak_bunch_t * bunch, int kb);
@@ -44,8 +56,28 @@ transfer_bunch_to_device(weak_bunch_t * bunch, int kb);
 void
 transfer_bunch_from_device(weak_bunch_t * bunch, int kb);
 
-int transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
-					int kb, FILE *fp, int rev, double scan_val);
+void 
+fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
+		     int kb);
+
+int 
+transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
+				    int kb, FILE *fp, int rev, double scan_val, int resonators);
+
+void
+transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, const int plane,
+					   const bunch_macroparticle_model_t * MPmodel,
+					   ring_t *ring, tracking_t * track, 
+					   int kb, int Np, cyclic_array_t *dipole_RW);
+  
+void
+initialize_cyclic_array_cuda(cyclic_array_t dipole_RW);
+
+void
+update_cyclic_array_cuda(cyclic_array_t *dipole_RW);
+
+void 
+free_cyclic_array_cuda(cyclic_array_t *dipole_RW);
 
 
 #endif

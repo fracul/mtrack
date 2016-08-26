@@ -25,4 +25,10 @@ doc: doc/html
 doc/html: FORCE
 	cd doc/; $(MAKE) html
 
+remake:
+	cd src/; $(MAKE) clean
+	cd src/; $(MAKE) 
+	cd src/; $(MAKE) clean
+	cd src/; $(MAKE) cuda
+
 FORCE:

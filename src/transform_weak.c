@@ -584,15 +584,18 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   }
   
       //Construction of the longrange wake potential:
-  if(ring->longrange_resonators_size > 0)
+  if(ring->longrange_resonators_size > 0) {
     construct_wake_phasor(lr_wake, phasor_end, &SelfFieldModel,
                           ring, kb, fnp_ring, ebeam, bunch);    
-  
+
+  }
+ 
   if(ring->longrange_resonators_size + SelfFieldModel.PlaneL > 0)
   {
     // Total effect of wake potentials
-    for (jp = 0; jp < bunch->Np; jp++)
+    for (jp = 0; jp < bunch->Np; jp++) {
       bunch->particles[jp].slope.xtau += factG * GL1[mapcell[jp]] + lr_wake[mapcell[jp]];
+    }
   }
   
   
@@ -652,7 +655,8 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
         active += aHC->Vpeak/(ring->E0 * FGIGA) * sin(ring->wrf * aHC->nHC * taucell + aHC->phi_aHC + aHC->nHC * kb * 2 * M_PI);
       }
       ideal = FacI * sin(ring->m_aHC * ring->wrf * taucell + ring->m_aHC * ring->phi_n);
-      fprintf(fp, "\n %ld   %e   %e   %e    %e   %e   %e   %e   %e",rev+1, scan_val, taucell,  factG * GL1[icell], lr_wake[icell], rftest, active, ideal, fnp[icell]);
+      //fprintf(fp, "\n %ld   %e   %e   %e    %e   %e   %e   %e   %e",rev+1, scan_val, taucell,  factG * GL1[icell], lr_wake[icell], rftest, active, ideal, fnp[icell]);
+      fprintf(fp, "\n %ld   %e   %e   %e    %e   %e   %e   %e   %e   %e",rev+1, scan_val, taucell,  factG * GL1[icell], lr_wake[icell], rftest, active, ideal, fnp[icell], fnp_ring[kb * SelfFieldModel.Ncell + icell]);
       if(SelfFieldModel.PlaneV > 0)
         fprintf(fp, "   %e   %e", -factG * GlambdaV[icell], dipoleV[icell]);
       if(SelfFieldModel.PlaneH > 0)
@@ -700,7 +704,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
   int m, k, in_mod;
   double tt;
   const double * moments;
-  double wake_voltage = 0.;
+  double wake_voltage = 0.0;
   double deltab = ring->T0 / ring->h;
   double RWconst = ring->T0 / ring->E0 / MPmodel->fNp / FTERA * ring->Lc / (M_PI * pow(beff3,3)) * sqrt(Z_0 * C_LIGHT * ring->rhorw / M_PI);  
   
@@ -712,16 +716,21 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
     if(ebeam->nfFill[in_mod])
     {
       moments = cyclic_array_get(k, all_moments);
-      tt = m * deltab;        
+      tt = m * deltab;
       wake_voltage += MPmodel->fNp * moments[plane-1] * ring->Ibunch[in_mod] / sqrt(tt);
     }  
   }
+  
+  //if (bunch->kb == 0)
+  //  printf("\n%d, %d, %d = %f, %f", bunch->kb, in, bpos, wake_voltage, wake_voltage*RWconst);
+  
   wake_voltage *= RWconst;  
-
   
   int jp;
+  
   for(jp = 0; jp < bunch->Np; jp++)
       bunch->particles[jp].slope.v[plane] += wake_voltage;
+  
 
   return 1;
 }
@@ -863,7 +872,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      V_old[1] = phasor_end[l*2 + 1];
      V_new[0] = phasor_end[l*2];
      V_new[1] = phasor_end[l*2 + 1];
-     
+
      for(m=0; m<ring->h; m++)
      {
        i = ring->h - m - 1;
@@ -875,30 +884,33 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
            {
              lr_wake[j] += V_old[0]; // Phasor of actual resonator l is added 
            }
+	   
            V_new[0] = (V_old[0] * progress[0] - V_old[1] * progress[1]) - ring->Ibunch[i] * fnp[i*Nbin + j] * fac;
            V_new[1] = (V_old[0] * progress[1] + V_old[1] * progress[0]);
            
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
-         V_new[0] = (V_old[0] * exp(C[0]*tbucket)*cos(C[1]*tbucket) - V_old[1] * exp(C[0]*tbucket)*sin(C[1]*tbucket)); // Decay and rotation of phasor between bunches
+	 V_new[0] = (V_old[0] * exp(C[0]*tbucket)*cos(C[1]*tbucket) - V_old[1] * exp(C[0]*tbucket)*sin(C[1]*tbucket)); // Decay and rotation of phasor between bunches
          V_new[1] = (V_old[0] * exp(C[0]*tbucket)*sin(C[1]*tbucket) + V_old[1] * exp(C[0]*tbucket)*cos(C[1]*tbucket));
-         
+
          V_old[0] = V_new[0];
          V_old[1] = V_new[1]; 
+	 
        }
        else
        { // Decay and rotation of phasor during the passage of an empty buncket
          V_new[0] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h) - V_old[1] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h));
          V_new[1] = (V_old[0] * exp(C[0]*ring->T0 / ring->h)*sin(C[1]*ring->T0 / ring->h) + V_old[1] * exp(C[0]*ring->T0 / ring->h)*cos(C[1]*ring->T0 / ring->h));
-         
          V_old[0] = V_new[0];
          V_old[1] = V_new[1];
+	 
        }
      }    
      phasor_end[l*2] = V_new[0];
      phasor_end[l*2 + 1] = V_new[1];   
    }
+      
  }
  
  
@@ -909,12 +921,3 @@ fnp_ring_destroy(double * fnp_ring)
    free(fnp_ring);
    fnp_ring = NULL;
  }
- 
- 
- 
- 
- 
- 
- 
- 
- 

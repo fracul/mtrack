@@ -41,6 +41,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   bunch_stats_t allstats;
 
   int m = 0;
+  int mm = 0;
   const int Nscan = track.NrevTot / track.NrevMon + track.Nscan;
   double scan_val_hist[Nscan];
   double scan_val = track.scan_start;
@@ -126,44 +127,55 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   weak_bunch_reset_statistics(&allstats);
 
   /* initialise cyclic array */
+  int fnp_size = (int)SelfFieldModel.Ncell * ring.Nharm;
   double * fnp_ring;
-  double phasor_end[2*ring.longrange_resonators_size]; // real & imag. part of phasor at end of turn
+  int phasor_size = ebeam.Nbunch*2*ring.longrange_resonators_size;
+  double phasor_end[phasor_size]; // real & imag. part of phasor at end of turn
   if (ring.longrange_resonators_size > 0)
   {
     int Nbin = SelfFieldModel.Ncell;
-    fnp_ring = (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
+    fnp_ring = (double *) calloc(fnp_size, sizeof(double));
 
     for (kb = 0; kb < ebeam.Nbunch; kb++)
     {
       if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunches[kb], kb))
 	ERROR("fnp_ring_init", return);
+
     }
 
-    wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunches[kb], kb, phasor_end, &ebeam);
+    for (kb = 0; kb < ebeam.Nbunch; kb++)
+    {
+      int offset = kb*2*ring.longrange_resonators_size;
+      wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunches[kb], 
+		       kb, &phasor_end[offset], &ebeam);
+    }
   }
 
+  /* initialise cyclic array */
   cyclic_array_t dipole_RW;
   if (track.EnableRW_long > 0)
   {
     if (!cyclic_array_create(&dipole_RW, (track.Nmlt+2)*ring.Nharm, 2))
       ERROR("cyclic_array_create", return);
     
+    
+    double bunch_dipole[2];
     for (kb = 0; kb < ebeam.Nbunch; kb++)
     {
-      double bunch_dipole[2] = {bunches[kb].stats.pos.x, bunches[kb].stats.pos.z};
+      bunch_dipole[0] = bunches[kb].stats.pos.x;
+      bunch_dipole[1] = bunches[kb].stats.pos.z;
       cyclic_array_set(kb, &bunch_dipole[0], &dipole_RW);
     }
 
     unsigned int i, j;
-    for(i = 0; i < ring.Nharm; i++)
-      if(ebeam.nfFill[i])
-      {
+    for(i = 0; i < ring.Nharm; i++) {
+      if(ebeam.nfFill[i]) {
         double * mom = cyclic_array_access(i, &dipole_RW);
         for(j = 1; j < track.Nmlt; j++)
           cyclic_array_set((j*ring.Nharm + i), mom, &dipole_RW);
       }
+    }
   }
-
   printf("Starting multi bunch tracking...\n");
 
   /* Initialize model for FBI interaction */
@@ -192,35 +204,38 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       worker_weak_stat_output(bstats_fp[kb], &bunches[kb].stats, bunches[kb].Ib);
       weak_bunch_reset_statistics(&bunches[kb].stats);
   
-      char filename_trafo[FILENAME_MAX] = "";
-      snprintf(filename_trafo, FILENAME_MAX, "%s/potentials_bunch_%d.dat", track.work_path, kb);  
-      trafo_fp[kb] = fopen(filename_trafo, "w+");
-      if(trafo_fp[kb] == NULL)
-	ERROR("fopen_potentials_bunch0", return);
-      fprintf(trafo_fp[kb], " # potentials and distributions, Ib = %g A ;\n", bunches[kb].Ib);
-      fprintf(trafo_fp[kb], " # rev  scan_val         tau         LON_wake_pot       HC_pot        rf_pot      active_cav      ideal_HC        bunch_shape");
-      if(SelfFieldModel.PlaneV > 0)
-	fprintf(trafo_fp[kb], "     VER_wake_pot     VER_dipole_mom");
-      if(SelfFieldModel.PlaneH > 0)
-	fprintf(trafo_fp[kb], "     HOR_wake_pot     HOR_dipole_mom");
-      fprintf(trafo_fp[kb], "\n");
+      if (track.NrevPotentialsOut<=track.NrevTot) {
+	char filename_trafo[FILENAME_MAX] = "";
+	snprintf(filename_trafo, FILENAME_MAX, "%s/potentials_bunch_%d.dat", track.work_path, kb);  
+	trafo_fp[kb] = fopen(filename_trafo, "w+");
+	if(trafo_fp[kb] == NULL)
+	  ERROR("fopen_potentials_bunch0", return);
+	fprintf(trafo_fp[kb], " # potentials and distributions, Ib = %g A ;\n", bunches[kb].Ib);
+	fprintf(trafo_fp[kb], " # rev  scan_val         tau         LON_wake_pot       HC_pot        rf_pot      active_cav      ideal_HC        bunch_shape");
+	if(SelfFieldModel.PlaneV > 0)
+	  fprintf(trafo_fp[kb], "     VER_wake_pot     VER_dipole_mom");
+	if(SelfFieldModel.PlaneH > 0)
+	  fprintf(trafo_fp[kb], "     HOR_wake_pot     HOR_dipole_mom");
+	fprintf(trafo_fp[kb], "\n");
+      }
     }
   }
 
   /* Counting turns for statistics */
   int long Nstat = 0;
   int iseed = bunchModel.iseed[LON];
-  
-  #ifdef MBTRACK_CUDA
   //setup device memory, init random numbers, page lock host memory
-  setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell);
+  setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, fnp_ring);
   transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
+  transfer_ebeam(&ebeam);
+  transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
+  initialize_cyclic_array_cuda(dipole_RW);
   for (kb = 0; kb < ebeam.Nbunch; kb++)
     allocate_bunch(&bunches[kb], kb);
-  #endif
+  
 
   printf("DEBUG: tracking %d bunches for %d turns\n", ebeam.Nbunch, track.NrevTot);
-  
+
   /* ----------------------------------------------------------------------------------------- */
   /* Tracking for NrevTot turns */
   for(rev = 0; rev < track.NrevTot; rev++)
@@ -235,31 +250,38 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       fflush(stdout);
     }
 
+    //transfer bunch to device
+    for (kb = 0; kb < ebeam.Nbunch; kb++)
+      transfer_bunch_to_device(&bunches[kb], kb);
+
+    if (ring.longrange_resonators_size > 0) {
+      for (kb = 0; kb < ebeam.Nbunch; kb++) {
+	fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
+      }
+    }
+
     for (kb = 0; kb < ebeam.Nbunch; kb++)
     {
-      //transfer bunch to device
-      //transfer_bunch_to_device(&bunches[kb], kb);
-
       /* Resonator selffield transformation includes effect of harmonic cavity and RW */
       /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */ 
       if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH 
 	 + ring.longrange_resonators_size > 0)
       {
-	transform_weak_bunch_selffield_cuda(&bunches[kb], SelfFieldModel, kb, trafo_fp[kb], rev, scan_val);
+	transform_weak_bunch_selffield_cuda(&bunches[kb], SelfFieldModel, kb, trafo_fp[kb], 
+					     rev, scan_val, ring.longrange_resonators_size);
       }
 
       /* Optics transformaiton including quantum excitation & radiation 
        * damping and active or passive HC.
        * Long. plane is always tracked, hor. and vert. has to be enabled */
-
       if (transform_weak_bunch_optic_cuda(&bunches[kb], &ring, &bunchModel, iseed+rev, kb) < 0) {
 	fprintf(stderr, "Error ! transform_optic_LON_CUDA failed\n");   
 	MPI_Abort(MPI_COMM_WORLD, 1);
       }
+      
 
       //transfer bunch back from device
       transfer_bunch_from_device(&bunches[kb], kb);
- 
     }
     /* end tracking for one bunch */
 
@@ -286,16 +308,40 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
 
     /* TODO update cyclic array with actual statistics */
+    //update the cyclic array on the CPU side, since the statistics are on the CPU
+    
+    if (track.EnableRW_long) {
+      for (kb = 0; kb < ebeam.Nbunch; kb++) {
+	bunch_stats_t * bstats = &(bunches[kb].stats);
+	double *mom = cyclic_array_access(-rev*ring.Nharm + kb, &dipole_RW);
+	mom[0] = bstats->pos.x;
+	mom[1] = bstats->pos.z;
+      }
+    }
+    update_cyclic_array_cuda(&dipole_RW);
 
     /* TODO include interbunch (long-range resistive-wall interactions */
+    if (track.EnableRW_long) {
+      for (kb = 0; kb < ebeam.Nbunch; kb++) {
+	const int bpos = -rev*ring.Nharm + kb;  //Actual position of bunch kb in cyclic array
+	if (track.TrackPlane[HOR])
+	  transform_bunch_RW_longrange_cyclic_cuda(m, bpos, HOR, &bunchModel, &ring, &track, kb, bunches[kb].Np, &dipole_RW);
+	if (track.TrackPlane[VER])
+	  transform_bunch_RW_longrange_cyclic_cuda(m, bpos, VER, &bunchModel, &ring, &track, kb, bunches[kb].Np, &dipole_RW);
+
+	//transfer bunch back from device
+	transfer_bunch_from_device(&bunches[kb], kb);
+      }
+      m++;
+    }
 
     /* write out statistics */
     if(Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)
     { /* Outputfile ampinv and bunch stats */
       Nstat *= ebeam.Nbunch;
       weak_bunch_update_statistics(&allstats, Nstat);
-      scan_val_hist[m] = scan_val;
-      m++;
+      scan_val_hist[mm] = scan_val;
+      mm++;
       if(track.EnableAmpinv_out) 
 	bunch_weak_writeout_ampinv(rev, rev/track.NrevMon, &CMhist, ebeam);
       bunch_stats_fprintf(bstats_fp_all, rev, &allstats, scan_val);
@@ -344,14 +390,10 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
 
   }
-
-
-  #ifdef MBTRACK_CUDA
+  
   free_cuda();
   for (kb = 0; kb < ebeam.Nbunch; kb++)
     free_bunch(&bunches[kb], kb);
-  #endif
-
   selffield_model_destroy(&SelfFieldModel);
   for (kb = 0; kb < ebeam.Nbunch; kb++)
     weak_bunch_destroy(&bunches[kb]);
@@ -360,9 +402,11 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     free(fnp_ring);
     fnp_ring = NULL;
   }
-  
-  if(track.EnableRW_long > 0)
+
+  if(track.EnableRW_long > 0) {
+    free_cyclic_array_cuda(&dipole_RW);
     cyclic_array_destroy(&dipole_RW);
+  }
 
   gettimeofday(&time_end, NULL);
 
