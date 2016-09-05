@@ -64,7 +64,7 @@ fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFie
 		     int kb);
 
 int
-construct_wake_phasor_cuda(int Np, int Ncell, int kb, int resonators);
+construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators);
 
 int 
 transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,

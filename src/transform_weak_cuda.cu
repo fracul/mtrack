@@ -510,6 +510,109 @@ __global__ void kernelWakePotentialEffect(particle_t *particles, int *mapcell, d
 
 }
 
+/*
+__global__ void kernelConstructWakePhasor2(double *dphasor_end, double *dlr_wake, 
+					   int *dfnp, int np, int Ncell, int resonators)
+{
+  int l = blockIdx.x % resonators;
+  int kb = blockIdx.x / resonators;
+
+  int offset = kb * Ncell;
+  int offset_phasor = kb * 2 * resonators;
+
+
+  extern __shared__ double smem[];
+  double *slr_wake = (double*)smem;
+  int *s_fnp = (int*)&smem[Ncell];
+  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+    slr_wake[tid] = 0.0;
+  
+  __syncthreads();
+
+  double progress0,progress1;
+  double C0,C1;
+  double alpha, Amp, dTau, tbucket, fac;
+  double V_old0, V_old1, V_new0, V_new1;
+  double expcos, expsin, expcos2, expsin2;
+  LR_resonator_t * lr_res;
+
+  if (threadIdx.x == 0) {
+    lr_res = &dlr_res[l];
+    alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
+    Amp = 2 * alpha * lr_res->Rs * dring.T0 / dring.E0 / FGIGA;
+    dTau = dSelfFieldModel.dT * dSelfFieldModel.sigma_tau; // Bin-width
+    tbucket = (dring.T0 / dring.h - dSelfFieldModel.Ncell * dTau); // distance between two bunches
+    fac = Amp / np * FMILLI;
+    
+    C0 = -alpha;
+    C1 = lr_res->wr;
+    progress0 = exp(C0 * dTau) * cos(C1 * dTau); // Decay and rotation of phasor during one bin
+    progress1 = exp(C0 * dTau) * sin(C1 * dTau);
+    
+    V_old0 = dphasor_end[offset_phasor + l*2];
+    V_old1 = dphasor_end[offset_phasor + l*2 + 1];
+    V_new0 = dphasor_end[offset_phasor + l*2];
+    V_new1 = dphasor_end[offset_phasor + l*2 + 1];
+    
+    expcos = exp(C0*tbucket)*cos(C1*tbucket);
+    expsin = exp(C0*tbucket)*sin(C1*tbucket);
+    expcos2 = exp(C0*dring.T0 / dring.h)*cos(C1*dring.T0 / dring.h);
+    expsin2 = exp(C0*dring.T0 / dring.h)*sin(C1*dring.T0 / dring.h);
+  }
+
+  for(int m = 0; m < dring.h; m++) {
+    int i = dring.h - m - 1;
+      
+    if(dnfFill[i] == 1) {
+      
+      __syncthreads();
+
+      for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+	s_fnp[tid] = dfnp[i*Ncell + tid];
+
+      __syncthreads();
+
+      if (threadIdx.x == 0) {
+	double ibfac = dIbunch[i] * fac;
+	for(int j=0; j<Ncell; j++) {
+	  if(i == kb) {
+	    slr_wake[j] += V_old0; // Phasor of actual resonator l is added 
+	  }
+	  
+	  V_new0 = (V_old0 * progress0 - V_old1 * progress1) - ibfac * s_fnp[j];
+	  V_new1 = (V_old0 * progress1 + V_old1 * progress0); 
+	  V_old0 = V_new0;
+	  V_old1 = V_new1;
+	}
+	
+	// Decay and rotation of phasor between bunches
+	V_new0 = (V_old0 * expcos -V_old1 * expsin); 
+	V_new1 = (V_old0 * expsin + V_old1 * expcos);
+	V_old0 = V_new0;
+	V_old1 = V_new1;
+      }
+    } else { 
+      // Decay and rotation of phasor during the passage of an empty buncket
+      if (threadIdx.x == 0) {
+	V_new0 = (V_old0 * expcos2 - V_old1 * expsin2);
+	V_new1 = (V_old0 * expsin2 + V_old1 * expcos2);      	
+	V_old0 = V_new0;
+	V_old1 = V_new1;
+      }
+    }
+    
+    if (threadIdx.x == 0) {
+      dphasor_end[offset_phasor + l*2] = V_new0;
+      dphasor_end[offset_phasor + l*2 + 1] = V_new1;   
+    }
+  }
+  __syncthreads();
+
+  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+    atomicAdd(&dlr_wake[offset + tid], slr_wake[tid]);
+
+} 
+*/
 
 //executes serially launched with 1 block 1 thread
 __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake, 
@@ -532,6 +635,7 @@ __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake,
   double expcos, expsin, expcos2, expsin2;
   LR_resonator_t * lr_res;
   // Determines the phasor after all bunches have passed and stores the sum in lr_wake
+
   if (threadIdx.x == 0) {
     lr_res = &dlr_res[l];
     alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
@@ -539,12 +643,12 @@ __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake,
     dTau = dSelfFieldModel.dT * dSelfFieldModel.sigma_tau; // Bin-width
     tbucket = (dring.T0 / dring.h - dSelfFieldModel.Ncell * dTau); // distance between two bunches
     fac = Amp / np * FMILLI;
-  
+    
     C0 = -alpha;
     C1 = lr_res->wr;
     progress0 = exp(C0 * dTau) * cos(C1 * dTau); // Decay and rotation of phasor during one bin
     progress1 = exp(C0 * dTau) * sin(C1 * dTau);
-
+    
     V_old0 = dphasor_end[l*2];
     V_old1 = dphasor_end[l*2 + 1];
     V_new0 = dphasor_end[l*2];
@@ -990,7 +1094,7 @@ fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFie
 }
 
 int
-construct_wake_phasor_cuda(int Np, int Ncell, int kb, int resonators)
+construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators)
 {
 
   cudaError_t err;
@@ -1005,14 +1109,24 @@ construct_wake_phasor_cuda(int Np, int Ncell, int kb, int resonators)
   if(resonators > 0) {
     int offset_phasor = kb * 2 * resonators;
     int smem_size = bytes + bytes_int;
+    
     kernelConstructWakePhasor<<<resonators, 128, smem_size, stream2>>>(&dphasor_end[offset_phasor], 
 								       &dlr_wake[offset], 
 								       dfnp_ring, Np, kb, 
 								       Ncell);
+    
+    
+
+    //int blocks = Nbunch * resonators;
+    /*
+    kernelConstructWakePhasor2<<<blocks, 128, smem_size, stream2>>>(dphasor_end, 
+								    dlr_wake, dfnp_ring, Np, 
+								    Ncell, resonators);
+    */
 
     err = cudaGetLastError();
     if (err != cudaSuccess)
-      fprintf(stderr, "Error ! CUDA error construct wake phaseor!\n");
+      fprintf(stderr, "Error ! CUDA error construct wake phaseor %s!\n", cudaGetErrorString(err));
   }
 
   return 1;

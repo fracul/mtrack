@@ -257,13 +257,12 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     //transfer bunch to device
     //for (kb = 0; kb < ebeam.Nbunch; kb++)
     //  transfer_bunch_to_device(&bunches[kb], kb);
-
     if (ring.longrange_resonators_size > 0) {
       for (kb = 0; kb < ebeam.Nbunch; kb++)
 	fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
 
       for (kb = 0; kb < ebeam.Nbunch; kb++)
-	construct_wake_phasor_cuda(Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
+	construct_wake_phasor_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
     }
 
     for (kb = 0; kb < ebeam.Nbunch; kb++)
@@ -285,7 +284,6 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	MPI_Abort(MPI_COMM_WORLD, 1);
       }
       
-
       //transfer bunch back from device
       transfer_bunch_from_device(&bunches[kb], kb);
     }

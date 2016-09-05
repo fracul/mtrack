@@ -102,11 +102,12 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   MPI_Send(&(bstats->slope_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD); 
   
   /* initialise cyclic array*/
-  if(ring.longrange_resonators_size > 0)
-  {
     int Nbin = SelfFieldModel.Ncell;
     fnp_ring =
     (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
+  if(ring.longrange_resonators_size > 0)
+  {
+
     
     if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb))
       ERROR("fnp_ring_init", return);
@@ -186,12 +187,12 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */    
     if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + ring.longrange_resonators_size > 0)
       transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, fnp_ring);
-    
+   
     /* Optics transformaiton including quantum excitation & radiation damping and active or passive HC*/
     /* Long. plane is always tracked, hor. and vert. has to be enabled */
     if(transform_weak_bunch_optic(&bunch, &bunchModel, iseed+rev, kb) < 0)   
       fprintf(stderr, "Error ! transform_optic_LON failed\n");   
-    
+
     /* FBII bunch TODO */
     /* FBII Communication TODO */    
     /* FBII train TODO (different approach) */    
