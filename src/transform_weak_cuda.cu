@@ -758,7 +758,7 @@ __global__ void kernelRWlongrangeCyclicH(particle_t *particles, double wake_volt
 __global__ void kernelRWlongrangeCyclicV(particle_t *particles, double wake_voltage, int Np) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < Np)
-    particles[idx].slope.v[HOR] += wake_voltage;
+    particles[idx].slope.v[VER] += wake_voltage;
 }
 
 void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, const int plane,
@@ -794,7 +794,6 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
   
 
   wake_voltage *= RWconst;  
-
   blocks = Np / threads + 1;
   if (plane == VER)
     kernelRWlongrangeCyclicV<<<blocks, threads>>>(d_particles[kb], wake_voltage, Np);
@@ -1216,7 +1215,7 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   if (SelfFieldModel.PlaneH > 0)
     kernelWakePotentialPlanesVH<<<blocks, threads, smem_size, stream2>>>(&dGlambdaH[offset], 
 									 &ddipoleH[offset],
-									 dSelfFieldGl,
+									 dSelfFieldGh,
 									 SelfFieldModel.Ncell);
 
   err = cudaGetLastError();
