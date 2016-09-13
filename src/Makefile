@@ -13,8 +13,8 @@
 #===========================================================================
 #
 
-CFLAGS=-Wall -O2
-CUDAFLAGS=-arch=sm_35 -lcuda -lcudart -lcurand -lcublas -fmad=false
+CFLAGS=-Wall -O2 -lnvToolsExt
+CUDAFLAGS=-arch=sm_35 -lcuda -lcudart -lcurand -lcublas -lnvToolsExt -fmad=false
 CC=gcc
 MPICC=mpicc -DDEBUG_INPUT
 LIBS=-lm

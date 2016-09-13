@@ -17,6 +17,7 @@
 
 #ifdef MBTRACK_CUDA
 #include "transform_weak_cuda.cuh"
+#include "nvToolsExt.h"
 #endif
 
 void manager_weakweak_cuda(ring_t ring, const tracking_t track,
@@ -283,7 +284,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	fprintf(stderr, "Error ! transform_optic_LON_CUDA failed\n");   
 	MPI_Abort(MPI_COMM_WORLD, 1);
       }
-      
+
       //transfer bunch back from device
       transfer_bunch_from_device(&bunches[kb], kb);
     }
@@ -291,6 +292,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     /* end tracking for one bunch */
 
     /* Update the statistics every turn */
+    nvtxRangePushA("Update statistics");
     Nstat++;
     for (kb = 0; kb < ebeam.Nbunch; kb++) {
       bunch_stats_t * bstats = &(bunches[kb].stats);
@@ -311,10 +313,10 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	weak_bunch_calc_ampinv(&bunches[kb], &track);
       weak_bunch_add_statistics(&allstats, &bunches[kb].stats);
     }
+    nvtxRangePop();
 
-    /* TODO update cyclic array with actual statistics */
     //update the cyclic array on the CPU side, since the statistics are on the CPU
-    
+    nvtxRangePush("Update cyclic array");
     if (track.EnableRW_long) {
       for (kb = 0; kb < ebeam.Nbunch; kb++) {
 	bunch_stats_t * bstats = &(bunches[kb].stats);
@@ -324,6 +326,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       }
       update_cyclic_array_cuda(&dipole_RW);
     }
+    nvtxRangePop();
     
 
     /* TODO include interbunch (long-range resistive-wall interactions */
@@ -343,6 +346,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
 
     /* write out statistics */
+    nvtxRangePushA("Write out statistics");
     if(Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)
     { /* Outputfile ampinv and bunch stats */
       Nstat *= ebeam.Nbunch;
@@ -369,6 +373,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       time_now = localtime(&now);
       printf(" done (at time: %d:%d:%d)\n", time_now->tm_hour, time_now->tm_min, time_now->tm_sec);
     }
+    nvtxRangePop();
 
   }
   /* end tracking --------------------------------------------------------------- */
