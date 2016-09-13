@@ -8,6 +8,8 @@ extern "C" {
 
 #include <thrust/reduce.h>
 #include <thrust/device_vector.h>
+#include <thrust/system/cuda/execution_policy.h> 
+
 
 #define BLOCK_SIZE 128
 
@@ -770,7 +772,7 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
   int elements = dipole_RW->m * dipole_RW->n;
   size_t bytes = dipole_RW->m * dipole_RW->n * sizeof(double);
 
-  cudaError_t e1 = cudaMemset(dwake_voltage, 0, bytes);
+  cudaError_t e1 = cudaMemsetAsync(dwake_voltage, 0, bytes, stream2);
   if (e1 != cudaSuccess)
     printf("\nCUDA error! Memset dwake_voltage %d %s\n", bytes, cudaGetErrorString(e1));
   
@@ -779,11 +781,13 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
   int threads = 128;
   int blocks = size / threads + 1;
 
-  kernelGetWakeVoltages<<<blocks, threads>>>(dwake_voltage, ddipole_RW, MPmodel->fNp, in, bpos, plane, size, kb, dipole_RW->n);
+  kernelGetWakeVoltages<<<blocks, threads, 0, stream2>>>(dwake_voltage, ddipole_RW, MPmodel->fNp, 
+							in, bpos, plane, size, kb, dipole_RW->n);
 
   //wrap wake voltage pointer in thrust device ptr
   thrust::device_ptr<double> thrust_wake_voltage(dwake_voltage);
-  double wake_voltage = thrust::reduce(thrust_wake_voltage, thrust_wake_voltage + elements);
+  double wake_voltage = thrust::reduce(thrust::cuda::par.on(stream2), 
+				       thrust_wake_voltage, thrust_wake_voltage + elements);
   
 
   double beff3 = plane == 1 ? ring->beffH[0] : ring->beffV[0];
@@ -796,10 +800,10 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
   wake_voltage *= RWconst;  
   blocks = Np / threads + 1;
   if (plane == VER)
-    kernelRWlongrangeCyclicV<<<blocks, threads>>>(d_particles[kb], wake_voltage, Np);
+    kernelRWlongrangeCyclicV<<<blocks, threads, 0, stream2>>>(d_particles[kb], wake_voltage, Np);
 
   if (plane == HOR)
-    kernelRWlongrangeCyclicH<<<blocks, threads>>>(d_particles[kb], wake_voltage, Np);  
+    kernelRWlongrangeCyclicH<<<blocks, threads, 0, stream2>>>(d_particles[kb], wake_voltage, Np);  
 
 }
 
@@ -1027,6 +1031,8 @@ void transfer_bunch_from_device(weak_bunch_t * bunch, int kb) {
   //e = cudaMemcpy(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
 //		 cudaMemcpyDeviceToHost); 
   
+  
+  cudaStreamSynchronize(stream2);
   e = cudaMemcpyAsync(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
 		      cudaMemcpyDeviceToHost, stream1);
   if (e != cudaSuccess)
@@ -1050,10 +1056,10 @@ transform_weak_bunch_optic_cuda(weak_bunch_t * bunch, const ring_t * ring,
 
   int shared_size = ring->active_HC_size * sizeof(active_HC_t);
 
-  kernelTransformWeakBunchOptic<<<blocks, threads, shared_size>>>(d_particles[kb], 
-								  d_cudaRndStates, 
-								  bunch->Np,
-								  kb);
+  kernelTransformWeakBunchOptic<<<blocks, threads, shared_size, stream2>>>(d_particles[kb], 
+									   d_cudaRndStates, 
+									   bunch->Np,
+									   kb);
 
   cudaError_t e1 = cudaGetLastError();
   if (e1 != cudaSuccess) {
