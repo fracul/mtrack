@@ -1225,15 +1225,10 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   /* otherwise problems in the ampinv statistics ! */
   if(filling == uniform)     
   {
-    track->Nbunch_out = ring->Nharm;
+    for(kb=0; kb < ring->Nharm; kb++) ebeam->nfFill[kb] = 1;
+    track->Nbunch_out = 1;
     track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
-    for(kb=0; kb < ring->Nharm; kb++) {
-      ebeam->nfFill[kb] = 1;
-      track->bunch_out[kb] = kb;
-    }
-    //track->Nbunch_out = 1;
-    //track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
-    //track->bunch_out[0] = 0;
+    track->bunch_out[0] = 0;
   }
   else if(filling == onefourth)   
   {
@@ -1264,15 +1259,12 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   }
   else if(filling == threefourth) 
   {
-    track->Nbunch_out = 3*ring->Nharm/4;
+    for(kb=0; kb < 3*ring->Nharm/4; kb++) ebeam->nfFill[kb] = 1;
+    track->Nbunch_out = 3;
     track->bunch_out = (int *) malloc(track->Nbunch_out * sizeof(int));
-    for(kb=0; kb < 3*ring->Nharm/4; kb++) {
-      ebeam->nfFill[kb] = 1;
-      track->bunch_out[kb] = kb;
-    }
-    //track->bunch_out[0] = 0;
-    //track->bunch_out[1] = (int)3*ring->Nharm/8;
-    //track->bunch_out[2] = (int)3*ring->Nharm/4 - 1; 
+    track->bunch_out[0] = 0;
+    track->bunch_out[1] = (int)3*ring->Nharm/8;
+    track->bunch_out[2] = (int)3*ring->Nharm/4 - 1; 
   }
   else if(filling == single)      
   {
