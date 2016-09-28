@@ -25,9 +25,7 @@ void worker_weakweak_cuda(ring_t ring, const tracking_t track,
 			  selffield_model_t SelfFieldModel)
 {
 
-//TODO: receive pointers to device memory from manager and take over data transfer and output
-//for cuda this can be done usinc IPC to sedn device memory address
-//for host? do we even need host version of two processes?
+//TODO: use for logging data or remove the worker process
 
 printf("Worker process doing nothing!\n");
 

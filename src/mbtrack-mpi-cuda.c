@@ -82,12 +82,14 @@ int main(int argc, char ** argv)
   }
 
   /* Check number of processes */
+  /*
   if (comm.world_size != 2) 
   {
     fprintf(stderr, "Process number must be 2; processes = %d).\n", comm.world_size);
     MPI_Finalize();
     return -1;
   }
+  */
 
   switch (comm.proc_id)
   {
