@@ -19,6 +19,9 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   struct tm * time_now;
   unsigned int kb;
   long int rev;
+
+  struct timeval time_start, time_end;
+  gettimeofday(&time_start, NULL);
   
   MPI_Status status;
   
@@ -293,4 +296,11 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   free(bunches);
   fclose(bstats_fp);
   bunch_CM_history_weak_destroy(&CMhist);
+
+  gettimeofday(&time_end, NULL);
+  
+  double timervalue = ( (time_end.tv_sec - time_start.tv_sec) * 1000000 + 
+			(time_end.tv_usec - time_start.tv_usec)) * 1e-6;
+  
+  printf("Total execution time: %f\n", timervalue);
 }
