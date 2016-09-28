@@ -60,21 +60,32 @@ curandState *d_cudaRndStates;
 particle_t **d_particles;
 active_HC_t *hactive_HC;
 LR_resonator_t *hlr_res;
+
 int *hnfFill;
 double *hIbunch;
 
 double *ddipole_RW;
 double *dwake_voltage;
 
+//two stream to overlap data transfer and kernel execution
+//TODO: not really needed after moving statistics calculations to GPU
 cudaStream_t stream1; 
 cudaStream_t stream2;
 
+/** Init random numbers.
+ *  Init random numbers, each state gets the same seed with a different sequence.
+ */
 __global__ void kernelInitRandoms(curandState *state, int size, int seed) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < size)
     curand_init(seed, idx, 0, &state[idx]);
 }
 
+
+/** transform_weak_bunch_optics CUDA version.
+ *  CUDA kernel for transfor weak bunch optics, each thread handles one particle from the bunch
+ *  shared memory used for active_HC data, to decrease the global memory accesses. 
+ */
 __global__ void kernelTransformWeakBunchOptic(particle_t *particles, curandState *rndState, 
 					      int np, int kb) 
 {
@@ -182,6 +193,12 @@ __global__ void kernelTransformWeakBunchOptic(particle_t *particles, curandState
 
 }
 
+/** Assign bin to each particle
+ *  Each thread handles one particle from the bunch and asigns the cell to 
+ *  which the particle belongs. N_trash_low and N_trash_high calculations missong from the
+ *  CUDA version since attomicAdds or additional parallel reduction kernel needed to get these sums
+ *  would decrease the performance drastically.
+ */
 __global__ void kernelAssignBin(particle_t *particles, int *mapcell, int np, int ncell)
 {
 
@@ -203,6 +220,9 @@ __global__ void kernelAssignBin(particle_t *particles, int *mapcell, int np, int
   }
 }
 
+/** Assign bin without checking for particles that are out of the mesh.
+ *
+ */
 __global__ void kernelAssignBinUpdate(particle_t *particles, int *mapcell, int np, int ncell) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -218,6 +238,11 @@ __global__ void kernelAssignBinUpdate(particle_t *particles, int *mapcell, int n
   }
 }
 
+/** Count particles per bin.
+ *  Count particles per bin for one bunch. Launch one thread per particle and use attomicAdd to 
+ *  calculate the sum. 
+ *  TODO: replace attomic operations with parallel reduction.
+ */
 __global__ void kernelCountFnp(int *fnp, int *mapcell, int np, int ncell) {
 
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -230,6 +255,13 @@ __global__ void kernelCountFnp(int *fnp, int *mapcell, int np, int ncell) {
 
 }
 
+
+/** attomicAdd for double precision.
+ *  Use atomic compare and swap to implement attomicAdd for double precision.
+ *  Nvidias sample function.
+ *  TODO: does not provide the best performance and should be avoided. Replace the kernels
+ *  that use double atomicAdd with parallel reduction (use thrust?).
+ */
 __device__ double atomicAdd(double* address, double val)
 {
     unsigned long long int* address_as_ull =
@@ -244,6 +276,11 @@ __device__ double atomicAdd(double* address, double val)
     return __longlong_as_double(old);
 }
 
+/** Count particles per bin and sum dipoleV and dipoleH per bin.
+ *  One thread per particle, sum up the values in the shared memory. When block is finished
+ *  use atomicAdd to add the values from shared memory to global memory. Shared memory used to
+ *  limit double attomicAdds to global memory.
+ */
 __global__ void kernelCountBinAtomic(particle_t *particles, double *dipoleV, double *dipoleH,
 				     int *fnp, int *mapcell, int np, int ncell, int nblock)
 {
@@ -286,76 +323,11 @@ __global__ void kernelCountBinAtomic(particle_t *particles, double *dipoleV, dou
 
 }
 
-
-//one block per bin, each block 
-__global__ void kernelCountBin(particle_t *particles, double *dipoleV, double *dipoleH, int *fnp, 
-			       int *mapcell, int np, int ncell)
-{
-  
-  int bin = blockIdx.x;
-  int blockSize = blockDim.x;
-  int tid = threadIdx.x;
-
-
-  //create arrays in shared memory
-  extern __shared__ double smem[];
-  double *s_dipoleV = (double*)smem;
-  double *s_dipoleH = (double*)&smem[blockSize];
-  int *s_fnp = (int*)&smem[2*blockSize];
-
-  //set shared memory to 0.0
-  for (int id = threadIdx.x; id < blockSize; id += blockSize) {
-    s_fnp[id] = 0;
-    s_dipoleV[id] = 0.0;
-    s_dipoleH[id] = 0.0;
-  }
-
-  //make sure global and shared memory is set in all the threads
-  __syncthreads();
-
-  //each block loops trough np with a step of blockDim.x
-  for (int id = threadIdx.x; id < np; id += blockSize) {
-    //load map
-    int map = mapcell[id];
-
-    //if bin of the particle == blockIdx.x load particle from global memory
-    //and calculate local fnp, dipoleV, dipoleH in shared memory
-    if (bin == map) {
-      particle_t p = particles[id];
-      s_fnp[tid] += 1;
-      s_dipoleV[tid] += p.pos.z;
-      s_dipoleH[tid] += p.pos.x;
-    }
-  }
-
-  __syncthreads();
-
-  //when particle loop is done perform parallel reduction to get total value per bin
-  int id = threadIdx.x;
-  for (int step = blockSize >> 1; step > 0; step = step >> 1) {
-    if (id < step) {
-      s_fnp[id] += s_fnp[id + step];
-      s_dipoleV[id] += s_dipoleV[id + step];
-      s_dipoleH[id] += s_dipoleH[id + step];
-    }
-  }
-
-  __syncthreads();
-
-  //write out to global memory
-  if (tid == 0) {
-    fnp[bin] = s_fnp[0];
-    dipoleV[bin] = s_dipoleV[0];
-    dipoleH[bin] = s_dipoleH[0];
-  }
-  
-
-}
-//thrust::find to search for icellmin and icellmax
-
-//launch one block with multiple threads, load fnp in shared memory and then thread 0 loops trough it
-//will be slow, but ncell is small, so it will be small % of the whole
-//simulation, not really worth using thrust
+/** Find the min and max cells.
+ * Launch one block with multiple threads, load fnp in shared memory and then thread 0 
+ * loops trough it will be slow, but ncell is small, so it will be small % of the whole simulation, 
+ * not really worth using thrust scan.
+ */
 __global__ void kernelGetMinMax(int *fnp) {
 
   extern __shared__ int s_fnp[];
@@ -387,7 +359,9 @@ __global__ void kernelGetMinMax(int *fnp) {
   }
 }
 
-//from icellmin + 1, to icellmax + 1, before that zero GL1
+/** Calculate the effects of wake-fields on a bin for LON plane.
+ *  One thread per bin, from icellmin + 1, to icellmax + 1, before that zero GL1
+ */
 __global__ void kernelWakePotential(int ncell, double *GL1, int *fnp,
 				    double *SelfFieldGl)
 {
@@ -410,7 +384,7 @@ __global__ void kernelWakePotential(int ncell, double *GL1, int *fnp,
   //make sure all threads complete shared memory load before continue
   __syncthreads();
 
-  if (icell < ncell && icell > icellmin) {
+  if (icell < ncell && icell > icellmin - 1) {
     double l_GL1 = 0.0;
 
     /***  Contribution of BBR impedances  ***/
@@ -446,6 +420,10 @@ __global__ void kernelWakePotential(int ncell, double *GL1, int *fnp,
 
 }
 
+
+/** Calculate wake-potentials for HOR or VER planes
+ *  Need one kernel launch for each plane with according Glambda, Gdipole and SelfFieldGl arrays
+ */
 __global__ void kernelWakePotentialPlanesVH(double *Glambda, double *Gdipole, double *SelfFieldGl, 
 					   int ncell) 
 {
@@ -476,6 +454,10 @@ __global__ void kernelWakePotentialPlanesVH(double *Glambda, double *Gdipole, do
 
 }
 
+/** Applay the effects of wake potentials from a bin to a particle.
+ *  One thread per particle, handle all the enable tracking planes. 
+ *  Use shared memory to allow coallesced load from global memory.
+ */
 __global__ void kernelWakePotentialEffect(particle_t *particles, int *mapcell, double *GL1, double *GlambdaV, double *GlambdaH, double *lr_wake, double bunchIb, int kb, int Np, int Ncell) {
 
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -512,111 +494,13 @@ __global__ void kernelWakePotentialEffect(particle_t *particles, int *mapcell, d
 
 }
 
-/*
-__global__ void kernelConstructWakePhasor2(double *dphasor_end, double *dlr_wake, 
-					   int *dfnp, int np, int Ncell, int resonators)
-{
-  int l = blockIdx.x % resonators;
-  int kb = blockIdx.x / resonators;
-
-  int offset = kb * Ncell;
-  int offset_phasor = kb * 2 * resonators;
-
-
-  extern __shared__ double smem[];
-  double *slr_wake = (double*)smem;
-  int *s_fnp = (int*)&smem[Ncell];
-  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
-    slr_wake[tid] = 0.0;
-  
-  __syncthreads();
-
-  double progress0,progress1;
-  double C0,C1;
-  double alpha, Amp, dTau, tbucket, fac;
-  double V_old0, V_old1, V_new0, V_new1;
-  double expcos, expsin, expcos2, expsin2;
-  LR_resonator_t * lr_res;
-
-  if (threadIdx.x == 0) {
-    lr_res = &dlr_res[l];
-    alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
-    Amp = 2 * alpha * lr_res->Rs * dring.T0 / dring.E0 / FGIGA;
-    dTau = dSelfFieldModel.dT * dSelfFieldModel.sigma_tau; // Bin-width
-    tbucket = (dring.T0 / dring.h - dSelfFieldModel.Ncell * dTau); // distance between two bunches
-    fac = Amp / np * FMILLI;
-    
-    C0 = -alpha;
-    C1 = lr_res->wr;
-    progress0 = exp(C0 * dTau) * cos(C1 * dTau); // Decay and rotation of phasor during one bin
-    progress1 = exp(C0 * dTau) * sin(C1 * dTau);
-    
-    V_old0 = dphasor_end[offset_phasor + l*2];
-    V_old1 = dphasor_end[offset_phasor + l*2 + 1];
-    V_new0 = dphasor_end[offset_phasor + l*2];
-    V_new1 = dphasor_end[offset_phasor + l*2 + 1];
-    
-    expcos = exp(C0*tbucket)*cos(C1*tbucket);
-    expsin = exp(C0*tbucket)*sin(C1*tbucket);
-    expcos2 = exp(C0*dring.T0 / dring.h)*cos(C1*dring.T0 / dring.h);
-    expsin2 = exp(C0*dring.T0 / dring.h)*sin(C1*dring.T0 / dring.h);
-  }
-
-  for(int m = 0; m < dring.h; m++) {
-    int i = dring.h - m - 1;
-      
-    if(dnfFill[i] == 1) {
-      
-      __syncthreads();
-
-      for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
-	s_fnp[tid] = dfnp[i*Ncell + tid];
-
-      __syncthreads();
-
-      if (threadIdx.x == 0) {
-	double ibfac = dIbunch[i] * fac;
-	for(int j=0; j<Ncell; j++) {
-	  if(i == kb) {
-	    slr_wake[j] += V_old0; // Phasor of actual resonator l is added 
-	  }
-	  
-	  V_new0 = (V_old0 * progress0 - V_old1 * progress1) - ibfac * s_fnp[j];
-	  V_new1 = (V_old0 * progress1 + V_old1 * progress0); 
-	  V_old0 = V_new0;
-	  V_old1 = V_new1;
-	}
-	
-	// Decay and rotation of phasor between bunches
-	V_new0 = (V_old0 * expcos -V_old1 * expsin); 
-	V_new1 = (V_old0 * expsin + V_old1 * expcos);
-	V_old0 = V_new0;
-	V_old1 = V_new1;
-      }
-    } else { 
-      // Decay and rotation of phasor during the passage of an empty buncket
-      if (threadIdx.x == 0) {
-	V_new0 = (V_old0 * expcos2 - V_old1 * expsin2);
-	V_new1 = (V_old0 * expsin2 + V_old1 * expcos2);      	
-	V_old0 = V_new0;
-	V_old1 = V_new1;
-      }
-    }
-    
-    if (threadIdx.x == 0) {
-      dphasor_end[offset_phasor + l*2] = V_new0;
-      dphasor_end[offset_phasor + l*2 + 1] = V_new1;   
-    }
-  }
-  __syncthreads();
-
-  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
-    atomicAdd(&dlr_wake[offset + tid], slr_wake[tid]);
-
-} 
-*/
-
 //executes serially launched with 1 block 1 thread
+/** Construct wake phasor cuda version.
+ *  Launch one block per longrange_resonator, threads in a block used to load data from global
+ *  to shared memory, all the calculations done by thead 0.
+ *  TODO: process all bunches at the same time, since no parallelism within bunch to exploit and 
+ *  GPU resources not uttilized.
+ */
 __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake, 
 					  int *dfnp, int np, int kb, int Ncell) 
 {
@@ -715,6 +599,9 @@ __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake,
   
 }
 
+/** get wake voltages for RWlongrangeCyclic
+ *  
+ */
 __global__ void kernelGetWakeVoltages(double *dwake_voltage, double *all_moments, 
 				      const double fNp, const int in, const int bpos, 
 				      const int plane, const int size, int kb, int n) {
@@ -751,52 +638,58 @@ __global__ void kernelGetWakeVoltages(double *dwake_voltage, double *all_moments
 
 }
 
+/** Apply the effects of wake voltages to HOR plane
+ *
+ */
 __global__ void kernelRWlongrangeCyclicH(particle_t *particles, double wake_voltage, int Np) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < Np)
     particles[idx].slope.v[HOR] += wake_voltage;
 }
 
+/** Apply the effects of wake voltages to VER plane
+ *
+ */
 __global__ void kernelRWlongrangeCyclicV(particle_t *particles, double wake_voltage, int Np) {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < Np)
     particles[idx].slope.v[VER] += wake_voltage;
 }
 
+/** Launch the kernels for transform_bunch_RW_longrange_cyclic execution on GPU
+ *
+ */
 void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, const int plane,
 					      const bunch_macroparticle_model_t * MPmodel,
 					      ring_t *ring, tracking_t * track, 
 					      int kb, int Np, cyclic_array_t *dipole_RW)
 {
-
   int elements = dipole_RW->m * dipole_RW->n;
   size_t bytes = dipole_RW->m * dipole_RW->n * sizeof(double);
 
+  //set dwake_voltage memory on GPU to 0
   cudaError_t e1 = cudaMemsetAsync(dwake_voltage, 0, bytes, stream2);
   if (e1 != cudaSuccess)
     printf("\nCUDA error! Memset dwake_voltage %d %s\n", bytes, cudaGetErrorString(e1));
   
 
+  //calc wake voltages
   int size = ((track->Nmlt+1)*ring->Nharm  + 1);
   int threads = 128;
   int blocks = size / threads + 1;
-
   kernelGetWakeVoltages<<<blocks, threads, 0, stream2>>>(dwake_voltage, ddipole_RW, MPmodel->fNp, 
 							in, bpos, plane, size, kb, dipole_RW->n);
 
   //wrap wake voltage pointer in thrust device ptr
   thrust::device_ptr<double> thrust_wake_voltage(dwake_voltage);
+  //calculate the sum of wake_voltage array
   double wake_voltage = thrust::reduce(thrust::cuda::par.on(stream2), 
 				       thrust_wake_voltage, thrust_wake_voltage + elements);
   
-
   double beff3 = plane == 1 ? ring->beffH[0] : ring->beffV[0];
   double RWconst = ring->T0 / ring->E0 / MPmodel->fNp / FTERA * ring->Lc / (M_PI * pow(beff3,3)) * sqrt(Z_0 * C_LIGHT * ring->rhorw / M_PI);  
-
-  //if (kb == 0)
-  //  printf("\n%d, %d, %d= %f, %f", kb, in, bpos, wake_voltage, wake_voltage*RWconst);
   
-
+  //applay the wake voltage to HOR and LON plane for each particle
   wake_voltage *= RWconst;  
   blocks = Np / threads + 1;
   if (plane == VER)
@@ -807,9 +700,12 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
 
 }
 
- void transfer_ring(const ring_t * ring, const bunch_macroparticle_model_t * bunchModel, 
-		    const tracking_t * track, const selffield_model_t * SelfFieldModel, 
-		    int Np, int seed)
+/** Transfer variables to the GPU memory
+ *
+ */
+void transfer_ring(const ring_t * ring, const bunch_macroparticle_model_t * bunchModel, 
+		   const tracking_t * track, const selffield_model_t * SelfFieldModel, 
+		   int Np, int seed)
 {
   
   cudaError_t e1, e2, e3;
@@ -892,7 +788,9 @@ void transform_bunch_RW_longrange_cyclic_cuda(const int in, const int bpos, cons
 
 }
 
-
+/** Transfer variables to the GPU memory
+ *
+ */
 void transfer_ebeam(const e_beam_t *ebeam) {
   cudaError_t e1, e2, e3;
 
@@ -910,6 +808,9 @@ void transfer_ebeam(const e_beam_t *ebeam) {
 
 }
 
+/** Transfer variables to the GPU memory
+ *
+ */
 void transfer_phasor(int nbunches, int resonators, double *phasor_end) {
   printf("Phasor size: %d\n", nbunches*2*resonators);
   //transfer phasor_end to gpu
@@ -917,6 +818,9 @@ void transfer_phasor(int nbunches, int resonators, double *phasor_end) {
   cudaMemcpy(dphasor_end, phasor_end, sizeof(double)*nbunches*2*resonators, cudaMemcpyHostToDevice);
 }
 
+/** Init device to use and allocate memory on the device for particles, random nubmer states and 
+ *  temporary arrays used in kernels.
+ */
 void setup_cuda(int nbunches, int np, int ncell, double *fnp_ring) {
   int ndevices = 0;
   cudaGetDeviceCount(&ndevices);
@@ -960,8 +864,10 @@ void setup_cuda(int nbunches, int np, int ncell, double *fnp_ring) {
   cudaMalloc( (void**) &dmapcell, sizeof(int) * np);
 }
 
-
-
+/** Allocate memory on GPU for particles 
+ *  Page lock CPU memory to improve data transfer speeds and allow parallel data transfer and 
+ *  kernel execution.
+ */
 void allocate_bunch(weak_bunch_t * bunch, int kb) {
   
   //allocate memory on the GPU for particle array
@@ -983,6 +889,9 @@ void allocate_bunch(weak_bunch_t * bunch, int kb) {
 
 }
 
+/** Free device memory.
+ *
+ */
 void free_cuda() {
   //free device memory
   cudaFree(d_cudaRndStates);
@@ -1007,6 +916,9 @@ void free_cuda() {
   cudaStreamDestroy(stream2);
 }
 
+/** Free device memory allocated for particles and unlock host memory.
+ *
+ */
 void free_bunch(weak_bunch_t * bunch, int kb) {
   //free device memory
   cudaFree(d_particles[kb]);
@@ -1015,6 +927,11 @@ void free_bunch(weak_bunch_t * bunch, int kb) {
   cudaHostUnregister(bunch->particles);
 }
 
+
+/** Transfer bunch from CPU memory to GPU memory.
+ *  All the kernels are executed in stream2 while data transfers execute in stream1.
+ *  If next kernel depends on the data transfer sync_device is necessary.
+ */
 void transfer_bunch_to_device(weak_bunch_t * bunch, int kb) {
 
   cudaError_t e;
@@ -1024,13 +941,13 @@ void transfer_bunch_to_device(weak_bunch_t * bunch, int kb) {
     fprintf(stderr, "Error ! CUDA bunch to device failed\n");
 }
 
+/** Transfer bunch from GPU memroy to CPU memory.
+ *  All the kernels are executed in stream2 while data transfers execute in stream1.
+ *  If next kernel depends on the data transfer sync_device is necessary.
+ */
 void transfer_bunch_from_device(weak_bunch_t * bunch, int kb) {
   
-  cudaError_t e;
-  
-  //e = cudaMemcpy(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
-//		 cudaMemcpyDeviceToHost); 
-  
+  cudaError_t e; 
   
   cudaStreamSynchronize(stream2);
   e = cudaMemcpyAsync(bunch->particles, d_particles[kb], bunch->Np * sizeof(particle_t), 
@@ -1042,10 +959,16 @@ void transfer_bunch_from_device(weak_bunch_t * bunch, int kb) {
 
 }
 
+/** Blocks the CPU while all the operations on the GPU are completed.
+ *  
+ */
 void sync_device() {
   cudaDeviceSynchronize();
 }
 
+/** Launches the kernel to perform weak bunch optics on GPU
+ *
+ */
 int
 transform_weak_bunch_optic_cuda(weak_bunch_t * bunch, const ring_t * ring, 
 				const bunch_macroparticle_model_t * bunchModel, int iseed, int kb)
@@ -1067,10 +990,12 @@ transform_weak_bunch_optic_cuda(weak_bunch_t * bunch, const ring_t * ring,
     return -1;
   }
   
-
   return 1;
 }
 
+/** FNP ring update on GPU.
+ *  Assign each particle in a bunch to a bin and count particles per bin.
+ */
 void 
 fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
 		     int kb) 
@@ -1098,6 +1023,10 @@ fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFie
 
 }
 
+/** Launch construct wake phaso on the GPU.
+ *  One block per longrange resonator. 
+ *  TODO: process all the bunches simultaniously.
+ */
 int
 construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators)
 {
@@ -1120,15 +1049,6 @@ construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators
 								       dfnp_ring, Np, kb, 
 								       Ncell);
     
-    
-
-    //int blocks = Nbunch * resonators;
-    /*
-    kernelConstructWakePhasor2<<<blocks, 128, smem_size, stream2>>>(dphasor_end, 
-								    dlr_wake, dfnp_ring, Np, 
-								    Ncell, resonators);
-    */
-
     err = cudaGetLastError();
     if (err != cudaSuccess)
       fprintf(stderr, "Error ! CUDA error construct wake phaseor %s!\n", cudaGetErrorString(err));
@@ -1137,6 +1057,12 @@ construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators
   return 1;
 }
 
+
+/** Launch kernels to perform transform_weak_bunch_selffield on GPU
+ *  Where possible parallelize over number of particles in a bunch or over number of bins.
+ *  Before kernel launches zero all the temporary memory to avoid corupt data from previous bunches
+ *  affecting the results.
+ */
 int
 transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
 				    int kb, FILE *fp, int rev, double scan_val, int resonators) 
@@ -1188,21 +1114,11 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   //find min and max bins with particles
   threads = 128;
   blocks = 1;
-  //smem_size = threads * sizeof(double);
   smem_size = bytes_int;
   kernelGetMinMax<<<blocks, threads, smem_size, stream2>>>(&dfnp[offset]);
- 
-  //int imin, imax;
-  //cudaMemcpyFromSymbol(&imin, dcellmin, sizeof(int)); 
-  //cudaMemcpyFromSymbol(&imax, dcellmax, sizeof(int));
-  //cudaMemcpyFromSymbolAsync(&imin, dcellmin, sizeof(int), cudaMemcpyDeviceToHost, stream2); 
-  //cudaMemcpyFromSymbolAsync(&imax, dcellmax, sizeof(int), cudaMemcpyDeviceToHost, stream2);
 
   //get the effects of wake potentials on LON plane
-  //simultaniously
   threads = 128;
-  //blocks = (imax - imin) / threads + 1;
-  //blocks = (SelfFieldModel.Ncell - imin) / threads + 1;
   blocks = SelfFieldModel.Ncell / threads + 1;
   smem_size = bytes_int + bytes;
   kernelWakePotential<<<blocks, threads, smem_size, stream2>>>(SelfFieldModel.Ncell, 
@@ -1227,23 +1143,6 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   err = cudaGetLastError();
   if (err != cudaSuccess)
     fprintf(stderr, "Error ! CUDA error wake potentials!\n");
-
-  /*
-  //construct_wake_phasor
-  if(resonators > 0) {
-    int offset_phasor = kb * 2 * resonators;
-    smem_size = bytes + bytes_int;
-    kernelConstructWakePhasor<<<resonators, 128, smem_size, stream2>>>(&dphasor_end[offset_phasor], 
-								       &dlr_wake[offset], 
-								       dfnp_ring, bunch->Np, kb, 
-								       SelfFieldModel.Ncell);
-
-    err = cudaGetLastError();
-    if (err != cudaSuccess)
-      fprintf(stderr, "Error ! CUDA error construct wake phaseor!\n");
-  }
-  */
-
 
   //apply effects of wake potentials to particles
   threads = 128;
@@ -1330,6 +1229,10 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   return 1;
 }
 
+/** Allocate memory on the GPU for cyclic_array_t.
+ *  Allocate memory for dipole_RW on the GPU, page lock the host memory and transfer dipole_RW to
+ *  the GPU.
+ */
 void initialize_cyclic_array_cuda(cyclic_array_t dipole_RW) {
 
   
@@ -1346,6 +1249,9 @@ void initialize_cyclic_array_cuda(cyclic_array_t dipole_RW) {
   
 }
 
+/** Transfer dipole_RW to the GPU
+ *
+ */
 void update_cyclic_array_cuda(cyclic_array_t *dipole_RW) {
   
   int bytes = dipole_RW->m * dipole_RW->n * sizeof(double);
@@ -1358,10 +1264,276 @@ void update_cyclic_array_cuda(cyclic_array_t *dipole_RW) {
   
 }
 
+/** Free cyclic array on the GPU.
+ *  Free the GPU memory and unlock host memory for dipole_RW
+ */
 void free_cyclic_array_cuda(cyclic_array_t *dipole_RW) {
   //free device memory
   cudaFree(ddipole_RW);
   cudaFree(dwake_voltage);
   //unregister page-locked memory from
   cudaHostUnregister(dipole_RW->arr);
+}
+
+
+/** Calculate statistics on the GPU.
+ *  Same as the statisits.c function, but rms calculations goes to gpu functions
+ */
+void 
+weak_bunch_calc_statistics_cuda(weak_bunch_t * bunch, const tracking_t * track) {
+  unsigned int plane = 0;
+  
+  if(bunch == NULL || bunch->particles == NULL)
+    return;
+
+  bunch_stats_t * bstats = &(bunch->stats);
+
+  weak_bunch_mean_rms_cuda(bunch,plane);
+  
+  for(plane = 0; plane < 3; plane ++)
+  {
+    if(track->TrackPlane[plane])
+    {
+      
+      bstats->sum_pos.v[plane] += bstats->pos.v[plane];
+      bstats->sum_pos_sigma.v[plane] += bstats->pos_sigma.v[plane];
+      bstats->sum_slope.v[plane] += bstats->slope.v[plane];
+      bstats->sum_slope_sigma.v[plane] += bstats->slope_sigma.v[plane];
+        
+      bstats->sum_pos_sqr.v[plane] += pow(bstats->pos.v[plane], 2.);
+      bstats->sum_pos_sigma_sqr.v[plane] += pow(bstats->pos_sigma.v[plane], 2.);
+      bstats->sum_slope_sqr.v[plane] += pow(bstats->slope.v[plane], 2.);
+      bstats->sum_slope_sigma_sqr.v[plane] += pow(bstats->slope_sigma.v[plane], 2.);
+    }
+  }
+}
+
+/** Operators to perform reductions and transforms on particle_t type using thrust.
+ *  Reduce operator to sum up pos of slope for one plane of particle.
+ */
+struct reduce_op
+{
+  int plane_m;
+
+  reduce_op(int plane) { plane_m = plane; }
+  void setPlane(int plane) { plane_m = plane; }
+  
+  __host__ __device__
+  particle_t operator()(particle_t p1, particle_t p2) {
+    p1.pos.v[plane_m] += p2.pos.v[plane_m];
+    p1.slope.v[plane_m] += p2.slope.v[plane_m]; 
+    return p1;    
+  }
+};
+
+/** Operators to perform reductions and transforms on particle_t type using thrust.
+ *  Transform operator for pos of slope of one plane of particle to calc rms.
+ */
+struct transform_op
+{
+  int plane_m;
+  double pos_ave_m;
+  double slope_ave_m;
+  transform_op(int plane) { plane_m = plane; }
+  void setPlane(int plane) { plane_m = plane; }
+  
+  void setAvg(double pos_ave, double slope_ave) { 
+    pos_ave_m = pos_ave;
+    slope_ave_m = slope_ave;
+  }
+
+  __host__ __device__
+  particle_t operator()(particle_t p1) {
+    p1.pos.v[plane_m] = (pos_ave_m - p1.pos.v[plane_m])*(pos_ave_m - p1.pos.v[plane_m]);
+    p1.slope.v[plane_m] = (slope_ave_m - p1.slope.v[plane_m])*(slope_ave_m - p1.slope.v[plane_m]);
+    return p1;
+  }
+
+};
+
+/** Operators to perform reductions and transforms on particle_t type using thrust.
+ *  Reduce operator to calc sum of pos and slope for all planes.
+ */
+struct reduce_op_all
+{
+  
+  __host__ __device__
+  particle_t operator()(particle_t p1, particle_t p2) {
+    p1.pos.x += p2.pos.x;
+    p1.pos.z += p2.pos.z;
+    p1.pos.xtau += p2.pos.xtau;
+    p1.slope.x += p2.slope.x; 
+    p1.slope.z += p2.slope.z; 
+    p1.slope.xtau += p2.slope.xtau; 
+    return p1;    
+  }
+};
+
+/** Operators to perform reductions and transforms on particle_t type using thrust.
+ *  Transform operator for pos and slope for all planes to calc rms.
+ */
+struct transform_op_all
+{
+  double x_pos_ave_m;
+  double z_pos_ave_m;
+  double xtau_pos_ave_m;
+  double x_slope_ave_m;
+  double z_slope_ave_m;
+  double xtau_slope_ave_m;
+  
+  void setAvg(double x_pos_ave, double z_pos_ave, double xtau_pos_ave, 
+	      double x_slope_ave, double z_slope_ave, double xtau_slope_ave)
+    { 
+      x_pos_ave_m = x_pos_ave;
+      z_pos_ave_m = z_pos_ave;
+      xtau_pos_ave_m = xtau_pos_ave;
+      x_slope_ave_m = x_slope_ave;
+      z_slope_ave_m = z_slope_ave;
+      xtau_slope_ave_m = xtau_slope_ave;
+    }
+
+  __host__ __device__
+  particle_t operator()(particle_t p1) {
+    p1.pos.x = (x_pos_ave_m - p1.pos.x) * (x_pos_ave_m - p1.pos.x);
+    p1.pos.z = (z_pos_ave_m - p1.pos.z) * (z_pos_ave_m - p1.pos.z);
+    p1.pos.xtau = (xtau_pos_ave_m - p1.pos.xtau) * (xtau_pos_ave_m - p1.pos.xtau);
+    p1.slope.x = (x_slope_ave_m - p1.slope.x) * (x_slope_ave_m - p1.slope.x);
+    p1.slope.z = (z_slope_ave_m - p1.slope.z) * (z_slope_ave_m - p1.slope.z);
+    p1.slope.xtau = (xtau_slope_ave_m - p1.slope.xtau) * (xtau_slope_ave_m - p1.slope.xtau);
+    return p1;
+  }
+
+};
+
+/** Operators to perform reductions and transforms on particle_t type using thrust.
+ *  Transform operator for pos and slope for all planes to calc ampinv.
+ */
+struct transform_ampinv_op_all
+{
+
+  double gamma1_m[3];
+  double alpha1_m[3];
+  double beta1_m[3];
+
+  transform_ampinv_op_all(const double gamma1[3], const double alpha1[3], const double beta1[3]) {
+    for (int i = 0; i < 3; i++) {
+      gamma1_m[i] = gamma1[i];
+      alpha1_m[i] = alpha1[i];
+      beta1_m[i] = beta1[i];
+    }
+  }
+
+  __host__ __device__
+  particle_t operator()(particle_t p1) {
+    
+    p1.pos.v[LON] = gamma1_m[LON] * p1.pos.v[LON] * p1.pos.v[LON] 
+      + 2.0 * alpha1_m[LON] * p1.pos.v[LON] * p1.slope.v[LON] 
+      + beta1_m[LON] * p1.slope.v[LON] * p1.slope.v[LON];
+
+    p1.pos.v[HOR] = gamma1_m[HOR] * p1.pos.v[HOR] * p1.pos.v[HOR] 
+      + 2.0 * alpha1_m[HOR] * p1.pos.v[HOR] * p1.slope.v[HOR] 
+      + beta1_m[HOR] * p1.slope.v[HOR] * p1.slope.v[HOR];
+
+    p1.pos.v[VER] = gamma1_m[VER] * p1.pos.v[VER] * p1.pos.v[VER] 
+      + 2.0 * alpha1_m[VER] * p1.pos.v[VER] * p1.slope.v[VER] 
+      + beta1_m[VER] * p1.slope.v[VER] * p1.slope.v[VER];
+    
+    return p1;
+  }
+
+};
+
+/** Calc avg and rms on GPU
+ *  Use thrust reduce to calculate the sums, and calc the avg on the CPU
+ *  Use thrust transform_reduce to calculate rms on the GPU
+ */
+void
+weak_bunch_mean_rms_cuda(weak_bunch_t * bunch, unsigned int plane) {
+
+  int kb = bunch->kb;
+  int Np = bunch->Np;
+  bunch_stats_t * bstats = &(bunch->stats);
+
+  reduce_op_all op;
+  particle_t tmp;
+
+  thrust::device_ptr<particle_t> t_particles(d_particles[kb]);
+
+  /* Average */
+  zeroParticle(&tmp);
+  tmp = thrust::reduce(t_particles, t_particles + Np, tmp, op);
+  double x_pos_ave = tmp.pos.x/((double) Np);
+  double x_slope_ave = tmp.slope.x/((double) Np);
+  double z_pos_ave = tmp.pos.z/((double) Np);
+  double z_slope_ave = tmp.slope.z/((double) Np);
+  double xtau_pos_ave = tmp.pos.xtau/((double) Np);
+  double xtau_slope_ave = tmp.slope.xtau/((double) Np);
+  
+  bstats->pos.x = x_pos_ave;  
+  bstats->slope.x = x_slope_ave;
+  bstats->pos.z = z_pos_ave;  
+  bstats->slope.z = z_slope_ave;
+  bstats->pos.xtau = xtau_pos_ave;  
+  bstats->slope.xtau = xtau_slope_ave;
+  
+  /* RMS */
+  zeroParticle(&tmp);
+  transform_op_all top;
+  top.setAvg(x_pos_ave, z_pos_ave, xtau_pos_ave, x_slope_ave, z_slope_ave, xtau_slope_ave);
+  tmp = thrust::transform_reduce(t_particles, t_particles + Np, top, tmp, op);
+
+  bstats->pos_sigma.x = sqrt(tmp.pos.x / ((double) Np));
+  bstats->slope_sigma.x = sqrt(tmp.slope.x / ((double) Np));
+  bstats->pos_sigma.z = sqrt(tmp.pos.z / ((double) Np));
+  bstats->slope_sigma.z = sqrt(tmp.slope.z / ((double) Np));
+  bstats->pos_sigma.xtau = sqrt(tmp.pos.xtau / ((double) Np));
+  bstats->slope_sigma.xtau = sqrt(tmp.slope.xtau / ((double) Np));
+  
+}
+
+/** Helper function to init particle values to 0.0
+ *
+ */
+void zeroParticle(particle_t *p) {
+  for (int j = 0; j < 3; j++) {
+    p[0].pos.v[j] = 0.0;
+    p[0].slope.v[j] = 0.0;
+  }
+}
+
+/** Calc ampinv on GPU
+ *  Use thrust transform_reduce to calc the ampinv on the GPU
+ */
+void
+weak_bunch_calc_ampinv_cuda(weak_bunch_t * bunch,  const tracking_t * track, const ring_t * ring)
+{
+ 
+  int plane; 
+  if(bunch == NULL || bunch->particles == NULL)
+    return;
+
+  reduce_op_all op;
+  transform_ampinv_op_all top(ring->gamma1, ring->alpha1, ring->beta1);
+
+  int kb = bunch->kb;
+  int Np = bunch->Np;
+  bunch_stats_t * bstats = &(bunch->stats);
+
+  particle_t tmp;
+  zeroParticle(&tmp);
+  
+  thrust::device_ptr<particle_t> t_particles(d_particles[kb]);
+
+  tmp = thrust::transform_reduce(t_particles, t_particles + Np, top, tmp, op);
+  
+  for(plane = 0; plane < 3; plane ++)
+  {
+    if(track->TrackPlane[plane])
+    { 
+      bstats->ampinv.v[plane] = tmp.pos.v[plane]/((double) bunch->Np);
+      bstats->ampinv_cm.v[plane] = ring->gamma1[plane] * pow(bstats->pos.v[plane], 2)
+          + 2.0 * ring->alpha1[plane] * bstats->pos.v[plane] * bstats->slope.v[plane]
+          + ring->beta1[plane] * pow(bstats->slope.v[plane], 2);
+    }
+  }
 }

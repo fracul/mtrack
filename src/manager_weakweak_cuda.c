@@ -85,6 +85,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   }
 
   printf("Number of particles: %d\n", Np);
+  printf("Number of bunches: %d\n", ebeam.Nbunch);
 
   /* Construct Greensfunctions for all given resonators */
   if(ring.resonators_size > 0)
@@ -225,15 +226,14 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   /* Counting turns for statistics */
   int long Nstat = 0;
   int iseed = bunchModel.iseed[LON];
+
   //setup device memory, init random numbers, page lock host memory
   setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, fnp_ring);
   transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
   transfer_ebeam(&ebeam);
   transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
-
   if (track.EnableRW_long > 0)
     initialize_cyclic_array_cuda(dipole_RW);
-
   for (kb = 0; kb < ebeam.Nbunch; kb++) {
     allocate_bunch(&bunches[kb], kb);
     transfer_bunch_to_device(&bunches[kb], kb);
@@ -286,7 +286,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       }
 
       //transfer bunch back from device
-      transfer_bunch_from_device(&bunches[kb], kb);
+      //transfer_bunch_from_device(&bunches[kb], kb);
     }
     sync_device();
     /* end tracking for one bunch */
@@ -297,8 +297,9 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     for (kb = 0; kb < ebeam.Nbunch; kb++) {
       bunch_stats_t * bstats = &(bunches[kb].stats);
 
-      weak_bunch_calc_statistics(&bunches[kb], &track);
-      
+      //weak_bunch_calc_statistics(&bunches[kb], &track);
+      weak_bunch_calc_statistics_cuda(&bunches[kb], &track);
+     
       if(bunches[kb].kb_out == 1)
       {
 	if(Nstat % track.NrevMon == 0 || (rev+1) % track.NrevScan == 0)  
@@ -309,9 +310,13 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	}
       }
     
-      if (rev%(track.NrevMon) == 0)
-	weak_bunch_calc_ampinv(&bunches[kb], &track);
+      if (rev%(track.NrevMon) == 0) {
+	//weak_bunch_calc_ampinv(&bunches[kb], &track);
+	weak_bunch_calc_ampinv_cuda(&bunches[kb], &track, &ring);
+      }
+      
       weak_bunch_add_statistics(&allstats, &bunches[kb].stats);
+      
     }
     nvtxRangePop();
 
@@ -339,7 +344,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	  transform_bunch_RW_longrange_cyclic_cuda(m, bpos, VER, &bunchModel, &ring, &track, kb, bunches[kb].Np, &dipole_RW);
 
 	//transfer bunch back from device
-	transfer_bunch_from_device(&bunches[kb], kb);
+	//transfer_bunch_from_device(&bunches[kb], kb);
       }
       sync_device();
       m++;

@@ -85,5 +85,16 @@ update_cyclic_array_cuda(cyclic_array_t *dipole_RW);
 void 
 free_cyclic_array_cuda(cyclic_array_t *dipole_RW);
 
+void 
+weak_bunch_calc_statistics_cuda(weak_bunch_t * bunch, const tracking_t * track);
+
+void
+weak_bunch_mean_rms_cuda(weak_bunch_t * bunch, unsigned int plane);
+
+void zeroParticle(particle_t *p);
+
+void
+weak_bunch_calc_ampinv_cuda(weak_bunch_t * bunch,  const tracking_t * track, const ring_t * ring);
+
 
 #endif
