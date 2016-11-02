@@ -70,7 +70,7 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       
       if(track.EnableQuantum)
       {     
-        particle->slope.xtau = particle->slope.xtau * damp + excite * c_fnorm(iseed);
+        particle->slope.xtau = particle->slope.xtau * damp + excite * box_muller(iseed);
         rffocus[jp] = (1.0 + particle0[jp].slope.xtau)/(1.0 + particle0[jp].slope.xtau + xeps_gainj);
       }
       particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring->T0*ring->ac;
@@ -89,7 +89,7 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       particle->slope.xtau = particle0[jp].slope.xtau  + xeps_gainj - ring->Urad;
       if(track.EnableQuantum)
       {     
-        particle->slope.xtau = particle->slope.xtau * damp + excite * c_fnorm(iseed);
+        particle->slope.xtau = particle->slope.xtau * damp + excite * box_muller(iseed);
         rffocus[jp] = (1.0 + particle0[jp].slope.xtau)/(1.0 + particle0[jp].slope.xtau + xeps_gainj);
       }
       particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring->T0*ring->ac;
@@ -121,8 +121,8 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
           
           if(track.EnableQuantum)
           {
-            particle->pos.z = particle->pos.z + quantumV_pos * c_fnorm(iseed);
-            particle->slope.z = rffocus[jp] * particle->slope.z + quantumV_slope * c_fnorm(iseed); 
+            particle->pos.z = particle->pos.z + quantumV_pos * box_muller(iseed);
+            particle->slope.z = rffocus[jp] * particle->slope.z + quantumV_slope * box_muller(iseed); 
           }
         }/*** End of loop over jp ***/
 //       }
@@ -156,8 +156,8 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
           
           if(track.EnableQuantum)
           {
-            particle->pos.x = particle->pos.x + quantumH_pos * c_fnorm(iseed);
-            particle->slope.x = rffocus[jp] * particle->slope.x + quantumH_slope * c_fnorm(iseed); 
+            particle->pos.x = particle->pos.x + quantumH_pos * box_muller(iseed);
+            particle->slope.x = rffocus[jp] * particle->slope.x + quantumH_slope * box_muller(iseed); 
           } 
         }/*** End of loop over jp ***/
          

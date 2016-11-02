@@ -406,6 +406,11 @@ int fprint_grid(FILE *, const grid_t);
 double c_fnorm(const int iseed);
 
 /**
+ * Random number generations following normal distribution, hopefully faster
+ */
+double box_muller(const int iseed);
+
+/**
  * Print a 2D matrix
  */
 void fprintf_matrix(FILE * fp, const unsigned lines, const unsigned columns, int matrix[][50]);
