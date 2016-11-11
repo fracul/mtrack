@@ -262,8 +262,10 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       for (kb = 0; kb < ebeam.Nbunch; kb++)
 	fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
 
-      for (kb = 0; kb < ebeam.Nbunch; kb++)
-	construct_wake_phasor_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
+      //for (kb = 0; kb < ebeam.Nbunch; kb++)
+//	construct_wake_phasor_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
+      construct_wake_phasor_cuda_all(ebeam.Nbunch, Np, SelfFieldModel.Ncell, ring.longrange_resonators_size);
+      //output_wake_phasor(ebeam.Nbunch, ring.longrange_resonators_size, SelfFieldModel.Ncell, rev);
     }
 
     for (kb = 0; kb < ebeam.Nbunch; kb++)
