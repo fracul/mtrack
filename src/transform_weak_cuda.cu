@@ -571,7 +571,7 @@ __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake,
 	}
 	
 	// Decay and rotation of phasor between bunches
-	V_new0 = (V_old0 * expcos -V_old1 * expsin); 
+	V_new0 = (V_old0 * expcos - V_old1 * expsin); 
 	V_new1 = (V_old0 * expsin + V_old1 * expcos);
 	V_old0 = V_new0;
 	V_old1 = V_new1;
@@ -929,8 +929,8 @@ void transfer_phasor(int nbunches, int resonators, double *phasor_end) {
 void setup_cuda(int nbunches, int np, int ncell, double *fnp_ring) {
   int ndevices = 0;
   cudaGetDeviceCount(&ndevices);
-  //cudaSetDevice(ndevices - 1);
-  cudaSetDevice(0);
+  cudaSetDevice(ndevices - 1);
+  //cudaSetDevice(0);
 
   cudaStreamCreate(&stream1);
   cudaStreamCreate(&stream2);
