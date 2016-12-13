@@ -1215,7 +1215,7 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
     return false;
   }
   
-  for(i=0; i<500; i++)
+  for(i=0; i<1000; i++)
   {
     ebeam->nfFill[i] = 0;
   }

@@ -79,7 +79,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   
   /* Broadcast to workers */
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
-  MPI_Bcast(ring.Ibunch, 500, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
+  MPI_Bcast(ring.Ibunch, 1000, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
   unsigned int bnum = 0;
   for(kb = 0; kb < ebeam.Nbunch; kb++)

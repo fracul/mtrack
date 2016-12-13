@@ -58,7 +58,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   bunchModel.fNp = (double) Np;
   
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
-  MPI_Bcast(ring.Ibunch, 500, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
+  MPI_Bcast(ring.Ibunch, 1000, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
   /* Recieve bunch number from manager */
   int kb;
