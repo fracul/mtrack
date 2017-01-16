@@ -422,13 +422,13 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
     double ARW = sqrt(Z_0*C_LIGHT/sigmarw/pi)/(pi*beffV3)*ring->Lc;
     double * RW0_val;
     RW0_val = (double *) malloc(1 * sizeof(double));
-    s0 = pow((2 * beffL2 * ring->rhorw / Z_0), 1.0/3.0);
+    s0 = pow((2 * ring->beffV[1] * ring->beffV[1] * ring->rhorw / Z_0), 1.0/3.0);
     if(RW_table_TRANS(sgmatau*dTau * C_LIGHT/s0, RW0_val) < 0)
       ERROR("RW_table_VER", return -1);
-    SelfFieldModel->Gv[0] += *(RW0_val) * 8*Z_0*C_LIGHT / (pi*beffV4) * s0 * ring->Lc;   
+    SelfFieldModel->Gv[0] += *(RW0_val) * 8*Z_0*C_LIGHT / (pi*beffV4) * s0 * ring->Lc;
     for(nc=1; nc<ncellmax; nc++) 
     {
-      double tRW    = nc*t_const;
+      double tRW    = (nc+0.5)*t_const;
       SelfFieldModel->Gv[nc] += ARW/sqrt(tRW);
     }   
     SelfFieldModel->PlaneV++;
@@ -441,11 +441,11 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
     RW0_val = (double *) malloc(1 * sizeof(double));
     s0 = pow((2 * ring->beffH[1] * ring->beffH[1] * ring->rhorw / Z_0), 1.0/3.0);
     if(RW_table_TRANS(sgmatau*dTau * C_LIGHT/s0, RW0_val) < 0)
-      ERROR("RW_table_VER", return -1);
-    SelfFieldModel->Gh[0] += *(RW0_val) * 4*Z_0*C_LIGHT / (pi*beffH4) * 2 * pow((2 * ring->rhorw / Z_0), 1.0/3.0);  
+      ERROR("RW_table_HOR", return -1);
+    SelfFieldModel->Gh[0] += *(RW0_val) * 8*Z_0*C_LIGHT / (pi*beffH4) * s0 * ring->Lc;
     for(nc=1; nc<ncellmax; nc++) 
     {
-      double tRW    = nc*t_const;
+      double tRW    = (nc+0.5)*t_const;
       SelfFieldModel->Gh[nc] += ARW/sqrt(tRW);
      }
      SelfFieldModel->PlaneH ++;
