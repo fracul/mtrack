@@ -58,7 +58,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     else
       bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); /* WARNING assuming equal curent in bunches */
       
-      MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
+    MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     MPI_Send(&bunch_Ib, 1, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     ring.Ibunch[kb] = bunch_Ib * FKILO;
     
@@ -79,7 +79,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   
   /* Broadcast to workers */
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
-  MPI_Bcast(ring.Ibunch, 1000, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
+  MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
   unsigned int bnum = 0;
   for(kb = 0; kb < ebeam.Nbunch; kb++)
