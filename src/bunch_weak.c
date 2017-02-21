@@ -337,7 +337,55 @@ weak_bunch_update_current(weak_bunch_t * bunch, double Inew)
   if(bunch->Np != 0) bunch->qp = bunch->Ib * ring.T0 / bunch->Np;
 }
 
-
+int
+weak_bunch_writeout_tbtbbb(const long int NrevTot, const long int NrevMon,
+			   const bunch_CM_history_weak_t * CMhist,
+			   const e_beam_t ebeam, const plane_t plane, const double * scan_val_hist)
+{
+  char filename[FILENAME_MAX] = "";
+    switch(plane)
+    {
+      case HOR:
+        snprintf(filename, FILENAME_MAX, "%s/bunchbybunch_HOR.dat", track.work_path);        
+      break;
+      case VER:
+        snprintf(filename, FILENAME_MAX, "%s/bunchbybunch_VER.dat", track.work_path);
+      break;
+      case LON:
+        snprintf(filename, FILENAME_MAX, "%s/bunchbybunch_LON.dat", track.work_path);
+      break;
+      default:
+        return -1;
+      break;
+    }
+    FILE * fp = fopen(filename,"w");
+    if (fp!=NULL)
+    {
+      fprintf(fp,"# turn    position of bunch 1,2,3...\n");
+      long int rev;
+      int m = 0;
+      for (rev=NrevMon; rev<NrevTot+1; rev+=NrevMon)
+      {
+	long int irevmon = rev/NrevMon-1;
+	unsigned int ibunch;
+	fprintf(fp," %3ld %15.8e", rev, scan_val_hist[m]);
+	for (ibunch=0; ibunch<ring.Nharm; ibunch++) {
+	  if (ebeam.nfFill[ibunch])
+	    {
+	      	if (plane==HOR) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].x);
+	      	if (plane==VER) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].z);
+	      	if (plane==LON) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].xtau);
+	    }
+	}
+	fprintf(fp,"\n");
+      }
+      fclose(fp);
+      return 1;
+    }
+    else {
+      return -1;
+    }
+}
 
 int
 weak_bunch_writeout_mean_ampinv(const long int NrevTot, const long int NrevMon,

@@ -230,6 +230,13 @@ weak_writeout_bunch_distribution(const weak_bunch_t * bunch,
 void
 weak_bunch_update_current(weak_bunch_t * bunch, double Inew);
 
+/**
+ * Writes out turn-by-turn data bunch-by-bunch for coupled-bunch mode analysis
+ */
+int
+weak_bunch_writeout_tbtbbb(const long int NrevTot, const long int NrevMon,
+			   const bunch_CM_history_weak_t * CMhist,
+			   const e_beam_t ebeam, const plane_t plane, const double * scan_val_hist);
 
 /**
  * Replaces bunch_writeout_mean_ampinv_pos,

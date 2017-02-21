@@ -35,6 +35,7 @@ struct LR_resonator
   unsigned int Nturn; /**< History of Nturn turns is taken into account */
   double * facc; /**< Cosine coefficient of wake field and it's derivatives */
   double * facs; /**< Sine coefficient of wake field and it's derivatives */
+  plane_t plane; /**< Plane: LON, VER, HOR */
 }
 LR_resonator_t;
 
@@ -100,8 +101,8 @@ typedef struct ring
   resonator_t * resonators; /**< List of resonators used for selffields */
   unsigned resonators_size; /**< Number of shortrange resonators for selffield */
   
-  LR_resonator_t * longrange_resonators;  /**< Longrange resonator, acts over several turns */
-  unsigned longrange_resonators_size; /** number of lr resonators */
+  LR_resonator_t * longrange_resonators[3];  /**< Longrange resonator, acts over several turns */
+  unsigned longrange_resonators_size[3]; /** number of lr resonators */
   unsigned Nbumax; /** longest Nbu of all LR resonators -> length of cyclic_array */
   unsigned lr_order; /** Approximation of the resonator wake up to this order */
   double * lr_wake; /** Wake pot. at m*delta_bucket and its (order) drivatives of all lr

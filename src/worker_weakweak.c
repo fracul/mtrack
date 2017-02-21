@@ -32,8 +32,13 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   FILE * wakes_fp = NULL;
   cyclic_array_t moments_history;
   cyclic_array_t dipole_RW;
-  double phasor_end[2*ring.longrange_resonators_size]; // real & imag. part of phasor at end of turn
+  double phasor_end[2*ring.longrange_resonators_size[LON]]; // real & imag. part of phasor at end of turn
+  double phasor_end_HOR[2*ring.longrange_resonators_size[HOR]]; // real & imag. part of phasor at end of turn
+  double phasor_end_VER[2*ring.longrange_resonators_size[VER]]; // real & imag. part of phasor at end of turn
+  int lr_res_sizetot = ring.longrange_resonators_size[LON] + ring.longrange_resonators_size[HOR] + ring.longrange_resonators_size[VER];
   double * fnp_ring; // # macroparticles per bin of last turn, for passive HC phasor
+  double * fnp_HOR; // # dipole moment in bins of last turn, for horizontal HOMs
+  double * fnp_VER; // # dipole moment in bins of last turn, for vertical HOMs
   double scan_val = track.scan_start;
   unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
   unsigned int bnum=0;
@@ -104,7 +109,8 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   MPI_Send(&(bstats->slope_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD); 
   
   /* initialise cyclic array*/
-  if(ring.longrange_resonators_size > 0)
+  int Nbin = SelfFieldModel.Ncell;
+  if(ring.longrange_resonators_size[LON] > 0)
   {
     if (ring.has_rf_feedback)
       rffb_init(ring.rf_feedback);
@@ -113,7 +119,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     fnp_ring =
     (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
     
-    if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb))
+    if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, LON))
       ERROR("fnp_ring_init", return);
     
     unsigned int i;    
@@ -124,9 +130,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
 	  MPI_Bcast(&fnp_ring[i*Nbin], Nbin, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
 	}
       
-    wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, phasor_end, &ebeam);
+    wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, phasor_end, &ebeam, LON);
 
-    /* feedback: calculate current voltage and phase and try to restore to desired values after longrange wake initialisation*/
+    /* feedback: calculate current voltage and phase and try to restore to desired value after longrange wake initialisation*/
     if (ring.has_rf_feedback) {
       double vmbar, phibar;
       rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
@@ -138,8 +144,44 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
     }
-    
   }
+  if(track.TrackPlane[HOR] && ring.longrange_resonators_size[HOR] > 0)
+  {
+    fnp_HOR =
+    (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
+    
+    if(!fnp_ring_update(&ring, fnp_HOR, &SelfFieldModel, &bunch, kb, HOR))
+      ERROR("fnp_ring_init", return);
+    
+    unsigned int i;    
+    for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+	{
+	  /* if kb = i: bunch_moments are sent, if not recieved and stored fnp_ring */
+	  MPI_Bcast(&fnp_HOR[i*Nbin], Nbin, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+	}
+      
+    wake_phasor_init(&ring, fnp_HOR, &SelfFieldModel, &bunch, kb, phasor_end_HOR, &ebeam, HOR);
+  }
+  if(track.TrackPlane[VER] && ring.longrange_resonators_size[VER] > 0)
+  {
+    fnp_VER =
+    (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
+    
+    if(!fnp_ring_update(&ring, fnp_VER, &SelfFieldModel, &bunch, kb, VER))
+      ERROR("fnp_ring_init", return);
+    
+    unsigned int i;    
+    for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+	{
+	  /* if kb = i: bunch_moments are sent, if not recieved and stored fnp_ring */
+	  MPI_Bcast(&fnp_VER[i*Nbin], Nbin, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+	}
+      
+    wake_phasor_init(&ring, fnp_VER, &SelfFieldModel, &bunch, kb, phasor_end_VER, &ebeam, VER);
+  }
+  
   
   /* initialise cyclic array*/
   if(track.EnableRW_long > 0)
@@ -202,8 +244,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   {      
     /* Resonator selffield transformation includes effect of harmonic cavity and RW */
     /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */    
-    if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + ring.longrange_resonators_size > 0)
-      transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, fnp_ring);
+    
+    if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + lr_res_sizetot > 0)
+      transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, phasor_end_HOR, phasor_end_VER, fnp_ring, fnp_HOR, fnp_VER);
 
     /* RF feedback: calculate and apply turn by turn correction to RF parameters */
     if (ring.has_rf_feedback) {
@@ -292,9 +335,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       m++;
     }
     
-    if(ring.longrange_resonators_size > 0)
+    if(ring.longrange_resonators_size[LON] > 0)
     {
-      if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb))
+      if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, LON))
         ERROR("fnp_ring_update", return);
       
       unsigned int i;      
@@ -302,6 +345,26 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
         if(ebeam.nfFill[i])
           /* if kb = i: bunch_moments are sent, if not recieved and stored fnp_ring */
           MPI_Bcast(&fnp_ring[i*SelfFieldModel.Ncell], SelfFieldModel.Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+    }
+    if(ring.longrange_resonators_size[HOR] > 0 && track.TrackPlane[HOR])
+    {
+      if(!fnp_ring_update(&ring, fnp_HOR, &SelfFieldModel, &bunch, kb, HOR))
+        ERROR("fnp_ring_update", return);
+      
+      for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+          /* if kb = i: bunch_moments are sent, if not recieved and stored fnp_ring */
+          MPI_Bcast(&fnp_HOR[i*SelfFieldModel.Ncell], SelfFieldModel.Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+    }
+    if(ring.longrange_resonators_size[VER] > 0 && track.TrackPlane[VER])
+    {
+      if(!fnp_ring_update(&ring, fnp_VER, &SelfFieldModel, &bunch, kb, VER))
+        ERROR("fnp_ring_update", return);
+      
+      for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+          /* if kb = i: bunch_moments are sent, if not recieved and stored fnp_ring */
+          MPI_Bcast(&fnp_VER[i*SelfFieldModel.Ncell], SelfFieldModel.Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
     }
     
     /* Update scan value if rev % NrevScan */
@@ -364,9 +427,19 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   
   selffield_model_destroy(&SelfFieldModel);
   weak_bunch_destroy(&bunch);
-  if(ring.longrange_resonators_size > 0)
+  if(ring.longrange_resonators_size[LON] > 0)
   {    
     free(fnp_ring);
+    fnp_ring = NULL;
+  }
+  if(ring.longrange_resonators_size[HOR] > 0 && track.TrackPlane[HOR])
+  {    
+    free(fnp_HOR);
+    fnp_ring = NULL;
+  }
+  if(ring.longrange_resonators_size[VER] > 0 && track.TrackPlane[VER])
+  {    
+    free(fnp_VER);
     fnp_ring = NULL;
   }
   

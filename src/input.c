@@ -280,7 +280,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
                     bunch_strong_distribution_t * bunchStrongD,
                     selffield_model_t * SelfFieldModel)
 {
-  int i;
+  int i, j, k, l;
   char section[32] = "";
   char filling_str[32] = "";
   char model_str[32] = "";
@@ -585,9 +585,9 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     if(resonator->Qfactor == 0.5)
     fprintf(stderr, "WARNING: resonator %d has Qfactor = 0.5 and will be ignored! \n", i);
     
-  if(!config_get_str(fp, section, "plane", plane_str)
-     || !scan_plane(plane_str, &(resonator->plane)) )
-    return false;
+    if(!config_get_str(fp, section, "plane", plane_str)
+       || !scan_plane(plane_str, &(resonator->plane)) )
+      return false;
 
     
     /* next resonator */
@@ -599,14 +599,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   /*
    * [harmonic_cavity_1], [harmonic_cavity_2], ...
    */
-  ring->longrange_resonators = (LR_resonator_t *) malloc(1 * sizeof(LR_resonator_t));
+  ring->longrange_resonators[LON] = (LR_resonator_t *) malloc(1 * sizeof(LR_resonator_t));
   i = 1;
    /* first HC */
   snprintf(section, 32, "harmonic_cavity_%d", i);
   while(config_have_section(fp, section))
   {
-    ring->longrange_resonators = (LR_resonator_t *) realloc(ring->longrange_resonators, i * sizeof(LR_resonator_t));
-    LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
+    ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], i * sizeof(LR_resonator_t));
+    LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
     
     lr_resonator->facc = NULL;
     lr_resonator->facs = NULL;
@@ -629,22 +629,82 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     i++;
     snprintf(section, 32, "harmonic_cavity_%d", i);
   }
-  ring->longrange_resonators_size = i-1;
+  ring->longrange_resonators_size[LON] = i-1;
 
-  /*
+   /* other longrange longitudinal wakes */
+  i = 1;
+  j = 1;
+  k = 1;
+  l = 1;
+  ring->longrange_resonators[HOR] = (LR_resonator_t *) malloc(1*sizeof(LR_resonator_t));
+  ring->longrange_resonators[VER] = (LR_resonator_t *) malloc(1*sizeof(LR_resonator_t));
+  snprintf(section, 32, "longrange_resonator_%d", i);
+  while(config_have_section(fp, section))
+  {
+    plane_t pl_tmp;
+    if(!config_get_str(fp, section, "plane", plane_str)
+       || !scan_plane(plane_str, &pl_tmp) )
+      return false;
+
+
+    LR_resonator_t * lr_resonator;
+    if (pl_tmp==LON) {
+      ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], (ring->longrange_resonators_size[LON]+j) * sizeof(LR_resonator_t));
+      lr_resonator = &(ring->longrange_resonators[LON][ring->longrange_resonators_size[LON]+j-1]);
+      j++;
+    }
+    else if (pl_tmp==HOR) {
+      ring->longrange_resonators[HOR] = (LR_resonator_t *) realloc(ring->longrange_resonators[HOR], k * sizeof(LR_resonator_t));
+      lr_resonator = &(ring->longrange_resonators[HOR][k-1]);
+      k++;
+    }
+    else if (pl_tmp==VER) {
+      ring->longrange_resonators[VER] = (LR_resonator_t *) realloc(ring->longrange_resonators[VER], l * sizeof(LR_resonator_t));
+      lr_resonator = &(ring->longrange_resonators[VER][l-1]);
+      l++;
+    }
+    
+    lr_resonator->plane = pl_tmp;
+    lr_resonator->facc = NULL;
+    lr_resonator->facs = NULL;
+    lr_resonator->m = 0;
+    lr_resonator->detune = 0;
+
+    double tmp;
+    if(!config_get_double(fp, section, "fres", &tmp))
+      return false;
+    lr_resonator->wr = (tmp*FGIGA)*2.0*M_PI;
+
+    if(!config_get_double(fp, section, "Rs", &(lr_resonator->Rs)))
+      return false;
+    
+    if(!config_get_double(fp, section, "Qfactor", &(lr_resonator->Qfactor)))
+      return false;
+    
+    /* Long range resonator always act in longitudinal axis */
+    
+    /* next resonator */
+    i++;
+    snprintf(section, 32, "longrange_resonator_%d", i);
+  }
+  ring->longrange_resonators_size[LON] += j-1;
+  ring->longrange_resonators_size[HOR] = k-1;
+  ring->longrange_resonators_size[VER] = l-1;
+
+  /* 
    * [rf_feedback]
    */
-  ring->rf_feedback = (rf_feedback_t *) malloc(1 * sizeof(rf_feedback_t));
+  ring->rf_feedback = (rf_feedback_t *) malloc(1*sizeof(rf_feedback_t));
   rf_feedback_t * rffb = ring->rf_feedback;
   snprintf(section, 32, "rf_feedback");
-  if (config_have_section(fp, section)) {
+  if (config_have_section(fp,section)) {
     ring->has_rf_feedback = 1;
     if (!config_get_int(fp, section, "resonator", &(rffb->lr_resonator)))
       return false;
 
     if (!config_get_int(fp, section, "averaging_length", &(rffb->len_average)))
       return false;
-
+     
   }
   
    /*
@@ -699,7 +759,8 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     SelfFieldModel->aindH = tmp / (2.0 * M_PI * FGIGA);
   
   config_get_fprint = true;  
-  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || ring->longrange_resonators_size > 0)
+  int lr_res_tot = ring->longrange_resonators_size[LON]+ring->longrange_resonators_size[HOR]+ring->longrange_resonators_size[VER];
+  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0)
   {
     if(!config_have_section(fp, section))
       return false;
@@ -1458,18 +1519,20 @@ bool setup_ring_parameters(ring_t * ring)
   ring->gamma1[HOR] = (1.0 + ring->alpha1[HOR] * ring->alpha1[HOR])/ring->beta1[HOR];
   ring->gamma1[VER] = (1.0 + ring->alpha1[VER] * ring->alpha1[VER])/ring->beta1[VER];
   
-    /* Longrange resonator parameters & constants */
+  /* Longrange resonator parameters & constants */
   int i;
   double tmp;
   unsigned Ntmp = 0;
   double mult =1.;
   double genphase = 0;
-  for(i = 1; i <= ring->longrange_resonators_size; i++)
+  for(i = 1; i <= ring->longrange_resonators_size[LON]; i++)
   {
-    LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
-    lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
-    if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
-    else if (!ring->has_rf_feedback) genphase = atan(lr_resonator->Qfactor * ( lr_resonator->wr/ring->wrf - ring->wrf/lr_resonator->wr ));
+    LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
+    if (lr_resonator->m>0) {
+      if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+      else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
+      lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
+    }
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
     lr_resonator->Nbu = lr_resonator->Nturn * ring->h;
@@ -1509,7 +1572,7 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
     }
   if(track->scan == 3)
     {
-      if(ring->longrange_resonators_size < 1)
+      if(ring->longrange_resonators_size[LON] < 1)
       {
         fprintf(stderr, "Qfactor scan but no longrange resonator given!\n");
         return false;
@@ -1517,20 +1580,20 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
       track->scan_start = 1./track->Nscan;
       track->scan_step = 1./track->Nscan;
       unsigned int i;
-      for(i = 0; i < ring->longrange_resonators_size; i++)
-        ring->longrange_resonators[i].Qfactor = ring->longrange_resonators[i].Qfactor / track->Nscan;
+      for(i = 0; i < ring->longrange_resonators_size[LON]; i++)
+        ring->longrange_resonators[LON][i].Qfactor = ring->longrange_resonators[LON][i].Qfactor / track->Nscan;
     }
     if(track->scan == 4)
     {
-      if(ring->longrange_resonators_size < 1)
+      if(ring->longrange_resonators_size[LON] < 1)
       {
         fprintf(stderr, "Qfactor scan but no longrange resonator given!\n");
         return false;
       }
       track->scan_step = (1. - track->scan_start) / (track->Nscan - 1);
       unsigned int i;
-      for(i = 0; i < ring->longrange_resonators_size; i++)
-        ring->longrange_resonators[i].Qfactor = ring->longrange_resonators[i].Qfactor * track->scan_start;
+      for(i = 0; i < ring->longrange_resonators_size[LON]; i++)
+        ring->longrange_resonators[LON][i].Qfactor = ring->longrange_resonators[LON][i].Qfactor * track->scan_start;
     }
     
     double b = ring->beffL[1];
@@ -1671,12 +1734,12 @@ fprint_resonators(FILE * fp, const ring_t ring, const selffield_model_t SelfFiel
   fprintf(fp, " ===================================================================\n");
   fprintf(fp, "   Harmonic Cavity Input: \n");
   fprintf(fp, " ===================================================================\n");
-  fprintf(fp, "  Passive HCs, number of LR resonators: %u\n", ring.longrange_resonators_size);
-  if (ring.longrange_resonators_size > 0)
+  fprintf(fp, "  Passive HCs, number of LR resonators: %u\n", ring.longrange_resonators_size[LON]);
+  if (ring.longrange_resonators_size[LON] > 0)
     fprintf(fp, "  Nbu max    = %d = %d turns,  order:  %u\n", ring.Nbumax, (int)ring.Nbumax/ring.Nharm, ring.lr_order);
-  for(k = 0; k < ring.longrange_resonators_size; k++) 
+  for(k = 0; k < ring.longrange_resonators_size[LON]; k++) 
   {
-    const LR_resonator_t resonator = ring.longrange_resonators[k];
+    const LR_resonator_t resonator = ring.longrange_resonators[LON][k];
     fprintf(fp, "  R [%d]     = %8.2lf [Mohm],         Q [%d]      = %8.2lf, \n",
             k, resonator.Rs/FMEGA, k, resonator.Qfactor);
     fprintf(fp, "  wr [%d]    = %8.2lf [GHz rad],     detuning: %8.2lf [kHz]\n",
@@ -1704,9 +1767,9 @@ int ring_destroy(ring_t * ring)
     ring->resonators = NULL;
   }
   
-  for(i = 0; i < ring->longrange_resonators_size; i++)
+  for(i = 0; i < ring->longrange_resonators_size[LON]; i++)
   {
-    LR_resonator_t * ResonImp = &ring->longrange_resonators[i];
+    LR_resonator_t * ResonImp = &ring->longrange_resonators[LON][i];
     
     ResonImp->Rs = 0;
     ResonImp->wr = 0;
@@ -1720,7 +1783,7 @@ int ring_destroy(ring_t * ring)
     ResonImp->facs = NULL;
   }  
   
-  if(ring->longrange_resonators_size > 0)
+  if(ring->longrange_resonators_size[LON] > 0)
   {
     free(ring->lr_wake);
     ring->lr_wake = NULL; 
