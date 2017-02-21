@@ -20,7 +20,7 @@
  */
 int
 transform_weak_bunch_optic(weak_bunch_t * bunch, 
-                           const bunch_macroparticle_model_t * bunchModel, int iseed, int kb);
+                           const bunch_macroparticle_model_t * bunchModel, int iseed, int kb, const ring_t * ring);
 
 /**
  * Initialize SelfField model, allocate memory for Greens function and set to zero
