@@ -262,7 +262,7 @@ __global__ void kernelCountFnp(int *fnp, int *mapcell, int np, int ncell) {
  *  TODO: does not provide the best performance and should be avoided. Replace the kernels
  *  that use double atomicAdd with parallel reduction (use thrust?).
  */
-__device__ double atomicAdd(double* address, double val)
+__device__ double atomicAddDouble(double* address, double val)
 {
     unsigned long long int* address_as_ull =
                                           (unsigned long long int*)address;
@@ -275,6 +275,7 @@ __device__ double atomicAdd(double* address, double val)
     } while (assumed != old);
     return __longlong_as_double(old);
 }
+
 
 /** Count particles per bin and sum dipoleV and dipoleH per bin.
  *  One thread per particle, sum up the values in the shared memory. When block is finished
@@ -308,8 +309,8 @@ __global__ void kernelCountBinAtomic(particle_t *particles, double *dipoleV, dou
     particle_t p = particles[idx];
     
     atomicAdd(&s_fnp[map], 1);
-    atomicAdd(&s_dipoleV[map], p.pos.z);
-    atomicAdd(&s_dipoleH[map], p.pos.x);
+    atomicAddDouble(&s_dipoleV[map], p.pos.z);
+    atomicAddDouble(&s_dipoleH[map], p.pos.x);
   }
 
   __syncthreads();
@@ -317,8 +318,8 @@ __global__ void kernelCountBinAtomic(particle_t *particles, double *dipoleV, dou
   //load local hist to global memory
   for (int id = threadIdx.x; id < ncell; id += blockDim.x) {
     atomicAdd(&fnp[id], s_fnp[id]);
-    atomicAdd(&dipoleV[id], s_dipoleV[id]);
-    atomicAdd(&dipoleH[id], s_dipoleH[id]);
+    atomicAddDouble(&dipoleV[id], s_dipoleV[id]);
+    atomicAddDouble(&dipoleH[id], s_dipoleH[id]);
   }
 
 }
@@ -594,7 +595,7 @@ __global__ void kernelConstructWakePhasor(double *dphasor_end, double *dlr_wake,
   __syncthreads();
 
   for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
-    atomicAdd(&dlr_wake[tid], slr_wake[tid]);
+    atomicAddDouble(&dlr_wake[tid], slr_wake[tid]);
   
 }
 
@@ -700,7 +701,7 @@ __global__ void kernelConstructWakePhasorAll(double *dphasor_end, double *dlr_wa
   __syncthreads();
 
   for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
-    atomicAdd(&dlr_wake[offset_wake + tid], slr_wake[tid]);
+    atomicAddDouble(&dlr_wake[offset_wake + tid], slr_wake[tid]);
   
 }
 
