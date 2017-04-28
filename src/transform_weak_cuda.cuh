@@ -39,7 +39,7 @@ void
 transfer_phasor(int nbunches, int resonators, double *phasor_end);
 
 void
-setup_cuda(int nbunches, int np, int ncell, double *fnp_ring);
+setup_cuda(int nbunches, int np, int ncell);
 
 void 
 allocate_bunch(weak_bunch_t * bunch, int kb);
@@ -62,6 +62,12 @@ transfer_bunch_from_device(weak_bunch_t * bunch, int kb);
 void 
 fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFieldModel,
 		     int kb);
+
+int
+initialize_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators);
+
+int
+initialize_wake_phasor_cuda_all(int Nbunch, int Np, int Ncell, int resonators);
 
 int
 construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators);

@@ -1,3 +1,4 @@
+
 extern "C" {
 #include "transform_weak_cuda.cuh"
 }
@@ -495,6 +496,199 @@ __global__ void kernelWakePotentialEffect(particle_t *particles, int *mapcell, d
 
 }
 
+/**Init wake phasor cuda version.
+ */
+__global__ void kernelInitWakePhasor(double *dphasor_end, double *dlr_wake, int *dfnp, int np,
+				     int kb, int Ncell)
+{
+  int l = blockIdx.x;
+
+  extern __shared__ double smem[];
+  double *slr_wake = (double*)smem;
+  int *s_fnp = (int*)&smem[Ncell];
+  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+    slr_wake[tid] = 0.0;//dlr_wake[tid];
+
+  __syncthreads();
+
+  double progress0,progress1;
+  double C0,C1;
+  double alpha, Amp, dTau, tbucket, fac;
+  double V_old0, V_old1, V_new0, V_new1;
+  double expcos, expsin, expcos2, expsin2;
+  LR_resonator_t * lr_res;
+  // Determines the phasor after all bunches have passed and stores the sum in lr_wake
+
+  int Nturns = (int)(dring.Nbumax / dring.h); // 10 damping times
+
+  if (threadIdx.x == 0) {
+    lr_res = &dlr_res[l];
+    alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
+    Amp = 2 * alpha * lr_res->Rs * dring.T0 / dring.E0 / FGIGA;
+    dTau = dSelfFieldModel.dT * dSelfFieldModel.sigma_tau; // Bin-width
+    tbucket = (dring.T0 / dring.h - dSelfFieldModel.Ncell * dTau); // distance between two bunches
+    fac = Amp / np * FMILLI;
+    
+
+    C0 = -alpha;
+    C1 = lr_res->wr;
+    progress0 = exp(C0 * dTau) * cos(C1 * dTau); // Decay and rotation of phasor during one bin
+    progress1 = exp(C0 * dTau) * sin(C1 * dTau);
+    
+    V_old0 = 0.0;
+    V_old1 = 0.0;
+    V_new0 = 0.0;
+    V_new1 = 0.0;
+    
+    expcos = exp(C0*tbucket)*cos(C1*tbucket);
+    expsin = exp(C0*tbucket)*sin(C1*tbucket);
+    expcos2 = exp(C0*dring.T0 / dring.h)*cos(C1*dring.T0 / dring.h);
+    expsin2 = exp(C0*dring.T0 / dring.h)*sin(C1*dring.T0 / dring.h);
+  }
+
+  for(int k=0; k<Nturns; k++) {
+    for(int m = 0; m < dring.h; m++) {
+      int i = dring.h - m - 1;
+      
+      if(dnfFill[i] == 1) {
+	
+	__syncthreads();
+
+	for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+	  s_fnp[tid] = dfnp[i*Ncell + tid];
+
+	__syncthreads();
+
+	if (threadIdx.x == 0) {
+	  double ibfac = dIbunch[i] * fac;
+	  for(int j=0; j<Ncell; j++) {  
+	    V_new0 = (V_old0 * progress0 - V_old1 * progress1) - ibfac * s_fnp[j];
+	    V_new1 = (V_old0 * progress1 + V_old1 * progress0); 
+	    V_old0 = V_new0;
+	    V_old1 = V_new1;
+	  }
+	
+	  // Decay and rotation of phasor between bunches
+	  V_new0 = (V_old0 * expcos - V_old1 * expsin); 
+	  V_new1 = (V_old0 * expsin + V_old1 * expcos);
+	  V_old0 = V_new0;
+	  V_old1 = V_new1;
+	}
+      } else { 
+	// Decay and rotation of phasor during the passage of an empty buncket
+	if (threadIdx.x == 0) {
+	  V_new0 = (V_old0 * expcos2 - V_old1 * expsin2);
+	  V_new1 = (V_old0 * expsin2 + V_old1 * expcos2);      	
+	  V_old0 = V_new0;
+	  V_old1 = V_new1;
+	}
+      }  
+    }
+  }
+  if (threadIdx.x == 0) {
+    dphasor_end[l*2] = V_new0;
+    dphasor_end[l*2 + 1] = V_new1;
+  }
+}
+
+
+/**Init wake phasor cuda version.
+ */
+__global__ void kernelInitWakePhasorAll(double *dphasor_end, double *dlr_wake, int *dfnp, 
+					int np, int Ncell, int nres, int nb)
+{
+  int l = blockIdx.x % nres; //resonator number
+  int kb = blockIdx.x / nres; //bunch number
+  int offset_phasor = 2 * kb * nres;
+
+  extern __shared__ double smem[];
+  double *slr_wake = (double*)smem;
+  int *s_fnp = (int*)&smem[Ncell];
+  for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+    slr_wake[tid] = 0.0;//dlr_wake[tid];
+
+  __syncthreads();
+
+  double progress0,progress1;
+  double C0,C1;
+  double alpha, Amp, dTau, tbucket, fac;
+  double V_old0, V_old1, V_new0, V_new1;
+  double expcos, expsin, expcos2, expsin2;
+  LR_resonator_t * lr_res;
+  // Determines the phasor after all bunches have passed and stores the sum in lr_wake
+
+  int Nturns = (int)(dring.Nbumax / dring.h); // 10 damping times
+
+  if (threadIdx.x == 0) {
+    lr_res = &dlr_res[l];
+    alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
+    Amp = 2 * alpha * lr_res->Rs * dring.T0 / dring.E0 / FGIGA;
+    dTau = dSelfFieldModel.dT * dSelfFieldModel.sigma_tau; // Bin-width
+    tbucket = (dring.T0 / dring.h - dSelfFieldModel.Ncell * dTau); // distance between two bunches
+    fac = Amp / np * FMILLI;
+    
+
+    C0 = -alpha;
+    C1 = lr_res->wr;
+    progress0 = exp(C0 * dTau) * cos(C1 * dTau); // Decay and rotation of phasor during one bin
+    progress1 = exp(C0 * dTau) * sin(C1 * dTau);
+    
+    V_old0 = 0.0;
+    V_old1 = 0.0;
+    V_new0 = 0.0;
+    V_new1 = 0.0;
+    
+    expcos = exp(C0*tbucket)*cos(C1*tbucket);
+    expsin = exp(C0*tbucket)*sin(C1*tbucket);
+    expcos2 = exp(C0*dring.T0 / dring.h)*cos(C1*dring.T0 / dring.h);
+    expsin2 = exp(C0*dring.T0 / dring.h)*sin(C1*dring.T0 / dring.h);
+  }
+
+  for(int k=0; k<Nturns; k++) {
+    for(int m = 0; m < dring.h; m++) {
+      int i = dring.h - m - 1;
+      
+      if(dnfFill[i] == 1) {
+	
+	__syncthreads();
+
+	for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
+	  s_fnp[tid] = dfnp[i*Ncell + tid];
+
+	__syncthreads();
+
+	if (threadIdx.x == 0) {
+	  double ibfac = dIbunch[i] * fac;
+	  for(int j=0; j<Ncell; j++) {  
+	    V_new0 = (V_old0 * progress0 - V_old1 * progress1) - ibfac * s_fnp[j];
+	    V_new1 = (V_old0 * progress1 + V_old1 * progress0); 
+	    V_old0 = V_new0;
+	    V_old1 = V_new1;
+	  }
+	
+	  // Decay and rotation of phasor between bunches
+	  V_new0 = (V_old0 * expcos - V_old1 * expsin); 
+	  V_new1 = (V_old0 * expsin + V_old1 * expcos);
+	  V_old0 = V_new0;
+	  V_old1 = V_new1;
+	}
+      } else { 
+	// Decay and rotation of phasor during the passage of an empty buncket
+	if (threadIdx.x == 0) {
+	  V_new0 = (V_old0 * expcos2 - V_old1 * expsin2);
+	  V_new1 = (V_old0 * expsin2 + V_old1 * expcos2);      	
+	  V_old0 = V_new0;
+	  V_old1 = V_new1;
+	}
+      }  
+    }
+  }
+  if (threadIdx.x == 0) {
+    dphasor_end[offset_phasor + l*2] = V_new0;
+    dphasor_end[offset_phasor + l*2 + 1] = V_new1;   
+  }
+}
+
 /** Construct wake phasor cuda version.
  *  Launch one block per longrange_resonator, threads in a block used to load data from global
  *  to shared memory, all the calculations done by thead 0.
@@ -643,9 +837,9 @@ __global__ void kernelConstructWakePhasorAll(double *dphasor_end, double *dlr_wa
     
     V_old0 = dphasor_end[offset_phasor + l*2];
     V_old1 = dphasor_end[offset_phasor + l*2 + 1];
-    V_new0 = dphasor_end[offset_phasor + l*2];
-    V_new1 = dphasor_end[offset_phasor + l*2 + 1];
-    
+    V_new0 = V_old0;
+    V_new1 = V_old1;
+        
     expcos = exp(C0*tbucket)*cos(C1*tbucket);
     expsin = exp(C0*tbucket)*sin(C1*tbucket);
     expcos2 = exp(C0*dring.T0 / dring.h)*cos(C1*dring.T0 / dring.h);
@@ -692,14 +886,14 @@ __global__ void kernelConstructWakePhasorAll(double *dphasor_end, double *dlr_wa
 	V_old1 = V_new1;
       }
     }
-    
-    if (threadIdx.x == 0) {
-      dphasor_end[offset_phasor + l*2] = V_new0;
-      dphasor_end[offset_phasor + l*2 + 1] = V_new1;   
-    }
   }
   __syncthreads();
 
+  if (threadIdx.x == 0) {
+    dphasor_end[offset_phasor + l*2] = V_new0;
+    dphasor_end[offset_phasor + l*2 + 1] = V_new1;   
+  }
+  
   for (int tid = threadIdx.x; tid < Ncell; tid += blockDim.x)
     atomicAddDouble(&dlr_wake[offset_wake + tid], slr_wake[tid]);
   
@@ -927,11 +1121,11 @@ void transfer_phasor(int nbunches, int resonators, double *phasor_end) {
 /** Init device to use and allocate memory on the device for particles, random nubmer states and 
  *  temporary arrays used in kernels.
  */
-void setup_cuda(int nbunches, int np, int ncell, double *fnp_ring) {
+void setup_cuda(int nbunches, int np, int ncell) {
   int ndevices = 0;
   cudaGetDeviceCount(&ndevices);
-  cudaSetDevice(ndevices - 1);
-  //cudaSetDevice(0);
+  //cudaSetDevice(ndevices - 1);
+  cudaSetDevice(0);
 
   cudaStreamCreate(&stream1);
   cudaStreamCreate(&stream2);
@@ -1130,6 +1324,76 @@ fnp_ring_update_cuda(const weak_bunch_t * bunch, const selffield_model_t SelfFie
 
 }
 
+
+/** Launch construct wake phasor on the GPU.
+ *  One block per longrange resonator. 
+ *  TODO: process all the bunches simultaniously.
+ */
+int
+initialize_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators)
+{
+
+  cudaError_t err;
+
+  int offset = kb * Ncell;
+  int bytes = Ncell * sizeof(double);
+  int bytes_int = Ncell * sizeof(int);
+  
+  cudaMemsetAsync(&dlr_wake[offset], 0, bytes, stream2);
+
+  //construct_wake_phasor
+  if(resonators > 0) {
+    int offset_phasor = kb * 2 * resonators;
+    int smem_size = bytes + bytes_int;
+    
+    printf("resonators: %d\n", resonators);
+    kernelInitWakePhasor<<<resonators, 128, 
+      smem_size, stream2>>>(&dphasor_end[offset_phasor], 
+			    &dlr_wake[offset], 
+			    dfnp_ring, Np, kb, 
+			    Ncell);
+    
+    err = cudaGetLastError();
+    if (err != cudaSuccess)
+      fprintf(stderr, "Error ! CUDA error construct wake phaseor %s!\n", 
+	      cudaGetErrorString(err));
+  }
+
+  return 1;
+}
+
+/** Launch construct wake phasor on the GPU for all bunches simultaniously
+ *  One block per longrange resonator, 
+ *  number of blocks is number of bunches times nubmer of resonators
+ */
+int
+initialize_wake_phasor_cuda_all(int Nbunch, int Np, int Ncell, int resonators) {
+
+  cudaError_t err;
+  int bytes = Ncell * sizeof(double);
+  int bytes_int = Ncell * sizeof(int);
+  
+  cudaMemsetAsync(dlr_wake, 0, Nbunch * bytes, stream2);
+
+  if (resonators > 0) {
+    int smem_size = bytes + bytes_int;
+    kernelInitWakePhasorAll<<<Nbunch * resonators, 128, smem_size, stream2>>>(dphasor_end,
+									      dlr_wake,
+									      dfnp_ring,
+									      Np, Ncell,
+									      resonators,
+									      Nbunch);
+    err = cudaGetLastError();
+    if (err != cudaSuccess)
+      fprintf(stderr, "Error ! CUDA error init wake phaseor: %s!\n", cudaGetErrorString(err));
+
+  }
+
+  return 1;
+
+}
+
+
 /** Launch construct wake phasor on the GPU.
  *  One block per longrange resonator. 
  *  TODO: process all the bunches simultaniously.
@@ -1151,14 +1415,23 @@ construct_wake_phasor_cuda(int Nbunch, int Np, int Ncell, int kb, int resonators
     int offset_phasor = kb * 2 * resonators;
     int smem_size = bytes + bytes_int;
     
-    kernelConstructWakePhasor<<<resonators, 128, smem_size, stream2>>>(&dphasor_end[offset_phasor], 
-								       &dlr_wake[offset], 
-								       dfnp_ring, Np, kb, 
-								       Ncell);
+    /*
+    kernelConstructWakePhasor<<<resonators, 128, 
+      smem_size, stream2>>>(&dphasor_end[offset_phasor], 
+			    &dlr_wake[offset], 
+			    dfnp_ring, Np, kb, 
+			    Ncell);
+    */
+    kernelConstructWakePhasor<<<resonators, 128, 
+      smem_size, stream2>>>(&dphasor_end[0], 
+			    &dlr_wake[0], 
+			    dfnp_ring, Np, kb, 
+			    Ncell);
     
     err = cudaGetLastError();
     if (err != cudaSuccess)
-      fprintf(stderr, "Error ! CUDA error construct wake phaseor %s!\n", cudaGetErrorString(err));
+      fprintf(stderr, "Error ! CUDA error construct wake phaseor %s!\n", 
+	      cudaGetErrorString(err));
   }
 
   return 1;
@@ -1179,13 +1452,14 @@ construct_wake_phasor_cuda_all(int Nbunch, int Np, int Ncell, int resonators) {
 
   if (resonators > 0) {
     int smem_size = bytes + bytes_int;
+    
     kernelConstructWakePhasorAll<<<Nbunch * resonators, 128, smem_size, stream2>>>(dphasor_end,
 										   dlr_wake,
 										   dfnp_ring,
 										   Np, Ncell,
 										   resonators,
 										   Nbunch);
-
+    
     err = cudaGetLastError();
     if (err != cudaSuccess)
       fprintf(stderr, "Error ! CUDA error construct wake phaseor: %s!\n", cudaGetErrorString(err));
@@ -1201,8 +1475,10 @@ int output_wake_phasor(int nbunches, int resonators, int ncells, int turn) {
   
 
   int size = 2 * resonators * nbunches;
+  //int size = 2 * resonators;
   int bytes = sizeof(double) * size;
-  int size2 = nbunches * ncells;
+  //int size2 = nbunches * ncells;
+  int size2 = ncells;
   int bytes2 = sizeof(double) * size2;
   double *hphasor_end = new double[size];
   double *hlr_wake = new double[size2];
@@ -1222,21 +1498,24 @@ int output_wake_phasor(int nbunches, int resonators, int ncells, int turn) {
   fclose(phasor_end_fp);
   delete[] hphasor_end;
 
-  FILE *lrwake_fp = NULL;
-  char filename2[FILENAME_MAX] = "";
-  snprintf(filename2, FILENAME_MAX, "all_lrwake_%d.dat", turn);  
 
-  lrwake_fp = fopen(filename2, "w+");
-  cudaDeviceSynchronize();  
-  cudaMemcpy(hlr_wake, dlr_wake, bytes2, cudaMemcpyDeviceToHost);
+  for (int kb = 0; kb < nbunches; kb++) {
+    FILE *lrwake_fp = NULL;
+    char filename2[FILENAME_MAX] = "";
+    snprintf(filename2, FILENAME_MAX, "all_lrwake_%d_%d.dat", turn, kb);  
+    
+    lrwake_fp = fopen(filename2, "w+");
+    cudaDeviceSynchronize();  
+    cudaMemcpy(hlr_wake, &dlr_wake[kb * ncells], bytes2, cudaMemcpyDeviceToHost);
 
-  for (int i = 0; i < size2; i++) {
-    fprintf(lrwake_fp, "%f\n", hlr_wake[i]);
+    for (int i = 0; i < size2; i++) {
+      fprintf(lrwake_fp, "%f\n", hlr_wake[i]);
+    }
+    
+    fclose(lrwake_fp);
   }
 
-  fclose(lrwake_fp);
   delete[] hlr_wake;
-
   return 1;
 
 }
@@ -1265,7 +1544,6 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
   cudaMemsetAsync(&dGL1[offset], 0, bytes, stream2);
   cudaMemsetAsync(&dGlambdaV[offset], 0, bytes, stream2);
   cudaMemsetAsync(&dGlambdaH[offset], 0, bytes,stream2);
-  //cudaMemsetAsync(&dlr_wake[offset], 0, bytes, stream2);
 
   //assign each particle a bin
   int smem_size = 0;
@@ -1373,6 +1651,10 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
     cudaMemcpyAsync(lr_wake, &dlr_wake[offset], bytes, cudaMemcpyDeviceToHost, stream2);    
     cudaDeviceSynchronize();  
 
+    cudaError_t e2 = cudaGetLastError();
+    if (e2 != cudaSuccess)
+      fprintf(stderr, "Error ! CUDA error logging potentials!\n");
+    
     int icell;  
     double sgm_xtau = SelfFieldModel.sigma_tau; /* [s] */
     double factG = -ring.T0 * bunch->Ib / (bunch->Np * ring.E0 * FGIGA); /* Wakes are in [V/C] or [V/Cm] -> per unit length & for a test charge with Q = 1 C */
@@ -1405,10 +1687,6 @@ transform_weak_bunch_selffield_cuda(weak_bunch_t * bunch, const selffield_model_
 	fprintf(fp, "   %e   %e", -factG * GlambdaH[icell], dipoleH[icell]);
     }
     fprintf(fp, "\n");
-
-    cudaError_t e2 = cudaGetLastError();
-    if (e2 != cudaSuccess)
-      fprintf(stderr, "Error ! CUDA error logging potentials!\n");
   }
 
   return 1;

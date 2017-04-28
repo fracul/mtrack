@@ -118,6 +118,7 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   }
   weak_bunch_update_statistics(&allstats, ebeam.Nbunch);
 
+
   char filename_bstats[FILENAME_MAX] = "";
   snprintf(filename_bstats, FILENAME_MAX, "%s/mean_bunch_all.dat", track.work_path);
   FILE * bstats_fp_all = fopen(filename_bstats, "w+");
@@ -129,6 +130,34 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   weak_bunch_reset_statistics(&allstats);
 
   /* initialise cyclic array */
+ 
+/*
+  int phasor_size = ebeam.Nbunch*2*ring.longrange_resonators_size;
+  double phasor_end[phasor_size]; // real & imag. part of phasor at end of turn
+
+  //Counting turns for statistics
+  int long Nstat = 0;
+  int iseed = bunchModel.iseed[LON];
+
+  //setup device memory, init random numbers, page lock host memory
+  setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell);
+  transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
+  transfer_ebeam(&ebeam);
+  transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
+  for (kb = 0; kb < ebeam.Nbunch; kb++) {
+    allocate_bunch(&bunches[kb], kb);
+    transfer_bunch_to_device(&bunches[kb], kb);
+  }
+
+  if (ring.longrange_resonators_size > 0)
+  {
+    for (kb = 0; kb < ebeam.Nbunch; kb++)
+      fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
+    initialize_wake_phasor_cuda_all(ebeam.Nbunch, Np, SelfFieldModel.Ncell,
+				    ring.longrange_resonators_size);
+  }
+*/
+ 
   int fnp_size = (int)SelfFieldModel.Ncell * ring.Nharm;
   double * fnp_ring;
   int phasor_size = ebeam.Nbunch*2*ring.longrange_resonators_size;
@@ -137,22 +166,55 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   {
     int Nbin = SelfFieldModel.Ncell;
     fnp_ring = (double *) calloc(fnp_size, sizeof(double));
-
+    
     for (kb = 0; kb < ebeam.Nbunch; kb++)
     {
       if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunches[kb], kb))
 	ERROR("fnp_ring_init", return);
-
+      
+    }
+    
+    wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunches[0], 
+		     kb, &phasor_end, &ebeam);
+    for (kb = 1; kb < ebeam.Nbunch; kb++) {
+      int i, offset;
+      for (i = 0; i < 2*ring.longrange_resonators_size; i++) {
+	offset = kb*2*ring.longrange_resonators_size;
+	phasor_end[offset + i] = phasor_end[i];
+      }
     }
 
-    for (kb = 0; kb < ebeam.Nbunch; kb++)
-    {
-      int offset = kb*2*ring.longrange_resonators_size;
-      wake_phasor_init(&ring, fnp_ring, &SelfFieldModel, &bunches[kb], 
-		       kb, &phasor_end[offset], &ebeam);
-    }
   }
 
+  //Counting turns for statistics
+  int long Nstat = 0;
+  int iseed = bunchModel.iseed[LON];
+  
+  //setup device memory, init random numbers, page lock host memory
+  setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell);
+  transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
+  transfer_ebeam(&ebeam);
+  transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
+
+  /* DEBUG */
+  /* FILE *phasor_end_fp = NULL; */
+  /* char filename[FILENAME_MAX] = ""; */
+  /* snprintf(filename, FILENAME_MAX, "gpu_phasor_end_%d.dat", kb);   */
+  /* phasor_end_fp = fopen(filename, "w+"); */
+  /* int i; */
+  /* for (i = 0; i < 2 * ring.longrange_resonators_size; i++) { */
+  /*   fprintf(phasor_end_fp, "%f\n", phasor_end[i]); */
+  /* } */
+  /* fclose(phasor_end_fp); */
+
+  /* output_wake_phasor(ebeam.Nbunch, ring.longrange_resonators_size, SelfFieldModel.Ncell, 0); */
+  /* END DEBUG */
+
+  for (kb = 0; kb < ebeam.Nbunch; kb++) {
+    allocate_bunch(&bunches[kb], kb);
+    transfer_bunch_to_device(&bunches[kb], kb);
+  }
+  
   /* initialise cyclic array */
   cyclic_array_t dipole_RW;
   if (track.EnableRW_long > 0)
@@ -179,6 +241,9 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
   }
   printf("Starting multi bunch tracking...\n");
+
+  if (track.EnableRW_long > 0)
+    initialize_cyclic_array_cuda(dipole_RW);
 
   /* Initialize model for FBI interaction */
   fbii_model_t fbii_model;
@@ -223,22 +288,6 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
     }
   }
 
-  /* Counting turns for statistics */
-  int long Nstat = 0;
-  int iseed = bunchModel.iseed[LON];
-
-  //setup device memory, init random numbers, page lock host memory
-  setup_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, fnp_ring);
-  transfer_ring(&ring, &bunchModel, &track, &SelfFieldModel, Np, iseed);
-  transfer_ebeam(&ebeam);
-  transfer_phasor(ebeam.Nbunch, ring.longrange_resonators_size, phasor_end);
-  if (track.EnableRW_long > 0)
-    initialize_cyclic_array_cuda(dipole_RW);
-  for (kb = 0; kb < ebeam.Nbunch; kb++) {
-    allocate_bunch(&bunches[kb], kb);
-    transfer_bunch_to_device(&bunches[kb], kb);
-  }
-
   printf("DEBUG: tracking %d bunches for %d turns\n", ebeam.Nbunch, track.NrevTot);
 
   /* ----------------------------------------------------------------------------------------- */
@@ -255,16 +304,12 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
       fflush(stdout);
     }
 
-    //transfer bunch to device
-    //for (kb = 0; kb < ebeam.Nbunch; kb++)
-    //  transfer_bunch_to_device(&bunches[kb], kb);
     if (ring.longrange_resonators_size > 0) {
       for (kb = 0; kb < ebeam.Nbunch; kb++)
 	fnp_ring_update_cuda(&bunches[kb], SelfFieldModel, kb);
-
-      //for (kb = 0; kb < ebeam.Nbunch; kb++)
-//	construct_wake_phasor_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, kb, ring.longrange_resonators_size);
+      
       construct_wake_phasor_cuda_all(ebeam.Nbunch, Np, SelfFieldModel.Ncell, ring.longrange_resonators_size);
+      //construct_wake_phasor_cuda(ebeam.Nbunch, Np, SelfFieldModel.Ncell, 0, ring.longrange_resonators_size);
       //output_wake_phasor(ebeam.Nbunch, ring.longrange_resonators_size, SelfFieldModel.Ncell, rev);
     }
 
@@ -286,9 +331,6 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
 	fprintf(stderr, "Error ! transform_optic_LON_CUDA failed\n");   
 	MPI_Abort(MPI_COMM_WORLD, 1);
       }
-
-      //transfer bunch back from device
-      //transfer_bunch_from_device(&bunches[kb], kb);
     }
     sync_device();
     /* end tracking for one bunch */
@@ -416,11 +458,6 @@ void manager_weakweak_cuda(ring_t ring, const tracking_t track,
   selffield_model_destroy(&SelfFieldModel);
   for (kb = 0; kb < ebeam.Nbunch; kb++)
     weak_bunch_destroy(&bunches[kb]);
-  if(ring.longrange_resonators_size > 0)
-  {    
-    free(fnp_ring);
-    fnp_ring = NULL;
-  }
 
   if(track.EnableRW_long > 0) {
     free_cyclic_array_cuda(&dipole_RW);
