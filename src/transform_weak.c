@@ -804,7 +804,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
 
      double taubeam=0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
        taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
        taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
        //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
@@ -820,7 +820,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
        for(m=0; m<ring->h; m++)
        {
          i = ring->h - m - 1;
-	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
          if(ebeam->nfFill[i] == 1)
@@ -849,7 +849,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
-	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
        }
      }
@@ -899,7 +899,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      V_new[1] = phasor_end[l*2 + 1];
      double taubeam = 0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
        taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
        taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
        //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
@@ -913,7 +913,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      for(m=0; m<ring->h; m++)
      {
        i = ring->h - m - 1;
-       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
        if(ebeam->nfFill[i] == 1)
@@ -946,7 +946,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
          V_old[0] = V_new[0];
          V_old[1] = V_new[1];
        }
-       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
      }    
      phasor_end[l*2] = V_new[0];
