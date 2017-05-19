@@ -405,10 +405,16 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if(!config_get_double(fp, section, "QH0", &(ring->QH0))
        | !config_get_double(fp, section, "QV0", &(ring->QV0)))
        return false;
-    
+
+  /*amplitude dependent tune shifts*/
+  config_get_fprint = false; /* no error printing */
+  if (!config_get_double(fp,section,"CHH",&(ring->CHH))) ring->CHH = 0;
+  if (!config_get_double(fp,section,"CHV",&(ring->CHV))) ring->CHH = 0;
+  if (!config_get_double(fp,section,"CVH",&(ring->CVH))) ring->CHH = 0;
+  if (!config_get_double(fp,section,"CVV",&(ring->CVV))) ring->CHH = 0;
+
   double tmp;
   /* Gzix -> normalized Chromaticity;  Cx not normalized */
-  config_get_fprint = false; /* no error printing */
   if(!config_get_int(fp, section, "mIdeal", &(ring->m_aHC)))
     ring->m_aHC = 3;
   if(!config_get_double(fp, section, "Gzix", &(ring->Gzix)))
@@ -1399,6 +1405,8 @@ bool setup_ring_parameters(ring_t * ring)
   ring->h       = ((int) (ring->frf * FMEGA * ring->Lc / C_LIGHT + 0.5));  
   ring->Nharm   = ring->h;
   ring->Ibunch = (double *) malloc(ring->Nharm*sizeof(double));
+  ring->AmpDependdQH = (ring->CHH+ring->CHV > 0.0);
+  ring->AmpDependdQV = (ring->CVH+ring->CVV > 0.0);
   
   /*** U0 : Energy Loss per Turn [keV]  ***/
   /*** Urad : Radiation Loss Term used in the tracking ***/

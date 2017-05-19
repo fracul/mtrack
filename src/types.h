@@ -91,6 +91,9 @@ typedef struct ring
   double HC_k;
   
   double QH0, QV0, Qso; /**< Tunes, H: hor., V: vert., s: sync. */
+  double CHH, CHV, CVH, CVV;
+  bool AmpDependdQV;
+  bool AmpDependdQH;
   double wgziH, wgziV; /**< [Hz] */
   double beta1[3], alpha1[3], gamma1[3];
   double dispH1,   disppH1;

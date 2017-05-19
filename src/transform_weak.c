@@ -101,7 +101,9 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     if(track.TrackPlane[VER])     
     {
       double PsiVj, cosVj, sinVj, amv11j, amv21j, amv12j, amv22j;
-      
+      double dQVj = 0.0;
+      double EVj, EHj;
+
       PsiV0   = 2.0*M_PI*ring->QV0;
 //       PsiV0   = 2.0*M_PI*ring->QV0/fNDlong;
 //       for(is=0; is<NDlong; is++)
@@ -110,7 +112,17 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
         {
           particle = &(bunch->particles[jp]);
       
-          PsiVj  = PsiV0 * (1.0 + ring->Gziz * particle0[jp].slope.xtau);
+	  if (ring->AmpDependdQV) {
+	    EVj = ring->gamma1[VER]*particle0[jp].pos.z*particle0[jp].pos.z
+	      +2*ring->alpha1[VER]*particle0[jp].pos.z*particle0[jp].slope.z
+	      +ring->beta1[VER]*particle0[jp].slope.z*particle0[jp].slope.z;
+	    EHj = ring->gamma1[VER]*particle0[jp].pos.x*particle0[jp].pos.x
+	      +2*ring->alpha1[VER]*particle0[jp].pos.x*particle0[jp].slope.x
+	      +ring->beta1[VER]*particle0[jp].slope.x*particle0[jp].slope.x;
+	    dQVj = ring->CVH*EHj+ring->CVV*EVj;
+	  }
+
+          PsiVj  = PsiV0 * (1.0 + ring->Gziz * particle0[jp].slope.xtau+dQVj);
           cosVj  = cos(PsiVj);
           sinVj  = sin(PsiVj);
           amv11j = cosVj + ring->alpha1[VER]*sinVj,   amv12j =         ring->beta1[VER]*sinVj;
@@ -132,6 +144,9 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     if(track.TrackPlane[HOR])     
     { 
       double PsiHj, cosHj, sinHj, amh11j, amh12j, amh13j, amh21j, amh22j, amh23j;
+      double dQHj = 0;
+      double EVj, EHj;
+
       PsiH0   = 2.0*M_PI*ring->QH0; 
 //       PsiH0   = 2.0*M_PI*ring->QH0/fNDlong; 
 //       for(is=0; is<NDlong; is++)
@@ -140,8 +155,18 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
         for(jp = 0; jp < bunch->Np; jp++)
         {
           particle_t * particle = &(bunch->particles[jp]);
+
+	  if (ring->AmpDependdQV) {
+	    EVj = ring->gamma1[VER]*particle0[jp].pos.z*particle0[jp].pos.z
+	      +2*ring->alpha1[VER]*particle0[jp].pos.z*particle0[jp].slope.z
+	      +ring->beta1[VER]*particle0[jp].slope.z*particle0[jp].slope.z;
+	    EHj = ring->gamma1[VER]*particle0[jp].pos.x*particle0[jp].pos.x
+	      +2*ring->alpha1[VER]*particle0[jp].pos.x*particle0[jp].slope.x
+	      +ring->beta1[VER]*particle0[jp].slope.x*particle0[jp].slope.x;
+	    dQHj = ring->CHH*EHj+ring->CHV*EVj;
+	  }
        
-          PsiHj  = PsiH0 * (1.0 + ring->Gzix * particle0[jp].slope.xtau);
+          PsiHj  = PsiH0 * (1.0 + ring->Gzix * particle0[jp].slope.xtau + dQHj);
           cosHj  = cos(PsiHj);  
           sinHj = sin(PsiHj);          
           amh11j = cosHj + ring->alpha1[HOR]*sinHj;
