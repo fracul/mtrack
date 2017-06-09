@@ -187,6 +187,10 @@ struct selffield_model
   int PlaneL; /**< To label if resonator in this plane exists AND plane is tracked */
   int PlaneH; /**< To label if resonator in this plane exists AND plane is tracked */
   int PlaneV; /**< To label if resonator in this plane exists AND plane is tracked */
+
+  int ImportL; /**< To label if the import data in this plane exists AND plane is tracked **/
+  double * importT;
+  double * importW;
 }
 selffield_model_t;
 

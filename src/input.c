@@ -191,6 +191,45 @@ bool read_input(char filename[FILENAME_MAX], ring_t * ring, tracking_t * track,
         fprintf(stderr, "ERROR: Unknown input file extension.\n");
       
       fclose(fp);
+
+      FILE * fpp = fopen("importW.txt", "r");
+      if(fpp == NULL) {
+        printf("No importW.txt.\n");
+	SelfFieldModel->ImportL = 0;
+      } else {
+	int nline=0;
+	char ch;
+
+	while((ch=fgetc(fpp))!=EOF) {
+          if(ch == '\n')
+            nline++;
+	}
+	printf("nline=%d\n",nline);
+
+	int i=0;
+	int TempImportT[SelfFieldModel->Ncell];
+	double TempImportW[SelfFieldModel->Ncell];
+
+	int TempTValue;
+	double TempWValue;
+	rewind(fpp);
+
+	for(i=0;i<nline;i++) {
+          fscanf(fpp,"%d %le",&TempTValue,&TempWValue);
+          TempImportT[i] = TempTValue;
+          TempImportW[i] = TempWValue;
+	}
+	fclose(fpp);
+
+	SelfFieldModel->importW = (double *) calloc(SelfFieldModel->Ncell,sizeof(double));
+
+	for(i=0;i<nline;i++)
+          SelfFieldModel->importW[i] = TempImportW[i];
+
+	SelfFieldModel->ImportL = 1;
+	printf("hahaha\n");
+
+      }
       return r;
     }
   }

@@ -299,6 +299,17 @@ construct_greensfunc_resonator(selffield_model_t * SelfFieldModel,
             SelfFieldModel->Gl[nc] +=
               ampl_long * exp(-argE) * (cos(arg) - fac * sin(arg));  
           }
+
+          /*** Contribution of the import longitudinal wake function ***/
+          /** Interpolation of the data **/
+
+          /** calculate the green function **/
+	  if (SelfFieldModel->ImportL == 1) {
+	    SelfFieldModel->Gl[0] += 0.5 * SelfFieldModel->importW[0];
+	    for (nc = 1; nc < SelfFieldModel->Ncell; nc++)
+	      SelfFieldModel->Gl[nc] += SelfFieldModel->importW[nc];
+	  }
+
           SelfFieldModel->PlaneL ++;
           break;
         } /* end LON */
