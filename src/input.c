@@ -1592,31 +1592,44 @@ bool macrop_model_setup_parameters(const ring_t ring, const tracking_t tracking,
 
   if(macrop_model->sgm_xx < 0.0)
     macrop_model->sgm_xx = FKILO*sqrt(ring.emittanceH/FGIGA *  ring.beta1[HOR]);
-  if(macrop_model->sgm_xp < 0.0)
-    macrop_model->sgm_xp = FKILO*sqrt(ring.emittanceH/FGIGA * ring.gamma1[HOR]);
+  if(macrop_model->sgm_xp < 0.0) {
+    macrop_model->sgm_xp = FKILO*sqrt(ring.emittanceH/FGIGA / ring.beta1[HOR]);
+    macrop_model->corr_xpx = -ring.alpha1[HOR]/ring.beta1[HOR];
+  }
+  else
+    macrop_model->corr_xpx = 0.0;
   if(macrop_model->sgm_zz < 0.0)
     macrop_model->sgm_zz = FKILO*sqrt(ring.emittanceH/FGIGA *  ring.beta1[VER] * ring.couplbeta);
-  if(macrop_model->sgm_zp < 0.0)
-     macrop_model->sgm_zp = FKILO*sqrt(ring.emittanceH/FGIGA * ring.gamma1[VER] * ring.couplbeta);
+  if(macrop_model->sgm_zp < 0.0) {
+    macrop_model->sgm_zp = FKILO*sqrt(ring.emittanceH/FGIGA / ring.beta1[VER] * ring.couplbeta);
+    macrop_model->corr_zpz = -ring.alpha1[VER]/ring.beta1[VER];
+  }
+  else
+    macrop_model->corr_zpz = 0.0;
   
   macrop_model->sgmatau = macrop_model->sgm_xtau/FGIGA;
+  macrop_model->corr_epstau = 0.0;
   
-        /* Offsets and sgms */
-    macrop_model->pos_offset.xtau = macrop_model->xtauCM_offset * FNANO;
-    macrop_model->pos_offset.x = macrop_model->xxCM_offset * FMILLI;
-    macrop_model->pos_offset.z = macrop_model->zzCM_offset * FMILLI;
+  /* Offsets and sgms */
+  macrop_model->pos_offset.xtau = macrop_model->xtauCM_offset * FNANO;
+  macrop_model->pos_offset.x = macrop_model->xxCM_offset * FMILLI;
+  macrop_model->pos_offset.z = macrop_model->zzCM_offset * FMILLI;
+  
+  macrop_model->slope_offset.xtau = macrop_model->xepsCM_offset;
+  macrop_model->slope_offset.x = macrop_model->xpCM_offset * FMILLI;
+  macrop_model->slope_offset.z = macrop_model->zpCM_offset * FMILLI;
+  
+  macrop_model->pos_sgm.xtau = macrop_model->sgm_xtau * FNANO;
+  macrop_model->pos_sgm.x = macrop_model->sgm_xx * FMILLI;
+  macrop_model->pos_sgm.z = macrop_model->sgm_zz * FMILLI;
+  
+  macrop_model->slope_sgm.xtau = macrop_model->sgm_xeps;
+  macrop_model->slope_sgm.x = macrop_model->sgm_xp * FMILLI;
+  macrop_model->slope_sgm.z = macrop_model->sgm_zp * FMILLI;
 
-    macrop_model->slope_offset.xtau = macrop_model->xepsCM_offset;
-    macrop_model->slope_offset.x = macrop_model->xpCM_offset * FMILLI;
-    macrop_model->slope_offset.z = macrop_model->zpCM_offset * FMILLI;
-      
-    macrop_model->pos_sgm.xtau = macrop_model->sgm_xtau * FNANO;
-    macrop_model->pos_sgm.x = macrop_model->sgm_xx * FMILLI;
-    macrop_model->pos_sgm.z = macrop_model->sgm_zz * FMILLI;
-
-    macrop_model->slope_sgm.xtau = macrop_model->sgm_xeps;
-    macrop_model->slope_sgm.x = macrop_model->sgm_xp * FMILLI;
-    macrop_model->slope_sgm.z = macrop_model->sgm_zp * FMILLI;
+  macrop_model->correlate.xtau = macrop_model->corr_epstau;
+  macrop_model->correlate.x = macrop_model->corr_xpx;
+  macrop_model->correlate.z = macrop_model->corr_zpz;
   
   return true;
 }
@@ -1635,8 +1648,10 @@ int fprint_parameters(FILE * fp, const ring_t ring,
   fprintf(fp, "\n  alpha1[u]       (u = hor, ver):  %9.5lf   %9.5lf", ring.alpha1[HOR], ring.alpha1[VER]);
   fprintf(fp, "\n  gamma1[u] [m-1] (u = hor, ver):  %9.5lf   %9.5lf", ring.gamma1[HOR], ring.gamma1[VER]);
   fprintf(fp, "\n  sgm_xtau = %8.6lf [ns],   sgm_xeps = %8.6lf", macrop_model.sgm_xtau, macrop_model.sgm_xeps);
-  fprintf(fp, "\n  sgm_xx   = %8.6lf [mm],   sgm_xp   = %8.6lf [mrad]", macrop_model.sgm_xx, macrop_model.sgm_xp);
-  fprintf(fp, "\n  sgm_zz   = %8.6lf [mm],   sgm_zp   = %8.6lf [mrad]", macrop_model.sgm_zz, macrop_model.sgm_zp);
+  fprintf(fp, "\n  sgm_xx   = %8.6lf [mm],   sgm_xp   = %8.6lf [mrad]", macrop_model.sgm_xx, 
+	  sqrt(pow(macrop_model.sgm_xp,2)+pow(macrop_model.corr_xpx*macrop_model.sgm_xx,2)));
+  fprintf(fp, "\n  sgm_zz   = %8.6lf [mm],   sgm_zp   = %8.6lf [mrad]", macrop_model.sgm_zz,
+	  sqrt(pow(macrop_model.sgm_zp,2)+pow(macrop_model.corr_zpz*macrop_model.sgm_zz,2)));
   fprintf(fp, "\n  taue  = %8.4lf [msec],   T0/taue = %9.6lf", FKILO*ring.taue, ring.T0/ring.taue);
   fprintf(fp, "\n  taux  = %8.4lf [msec],   T0/taux = %9.6lf", FKILO*ring.taux, ring.T0/ring.taux);
   fprintf(fp, "\n  tauz  = %8.4lf [msec],   T0/tauz = %9.6lf", FKILO*ring.tauz, ring.T0/ring.tauz);

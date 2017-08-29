@@ -91,14 +91,16 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
   const double pos_sgm = bunchModel.pos_sgm.v[plane];
   const double slope_offset = bunchModel.slope_offset.v[plane];
   const double slope_sgm = bunchModel.slope_sgm.v[plane];
+  const double correlate = bunchModel.correlate.v[plane];
   const int iseed = bunchModel.iseed[plane] + bunch->kb; /* (+ bunch->kb) to have different distr. for every bunch */
 
   unsigned jp;
   for(jp = 0; jp < bunch->Np; jp++)
   {
     particle_t * particle = &(bunch->particles[jp]);
-    particle->pos.v[plane] = pos_offset + pos_sgm * c_fnorm(iseed);
-    particle->slope.v[plane] = slope_offset + slope_sgm * c_fnorm(iseed);
+    double tmp_pos = pos_sgm * c_fnorm(iseed);
+    particle->pos.v[plane] = pos_offset + tmp_pos;
+    particle->slope.v[plane] = slope_offset + slope_sgm * c_fnorm(iseed) + correlate * tmp_pos;
   }
 }
 
