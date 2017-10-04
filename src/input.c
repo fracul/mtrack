@@ -1434,7 +1434,7 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   int Nbunch = 0;
   for (kb = 0; kb<Nharm; kb++) {
     if(fscanf(efp,"%d %lf %lf\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
-      return false;
+      break;
     while (nb_tmp>kb) {
       bucket_out[kb] = 0;
       kb++;
@@ -1472,6 +1472,7 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
       Nbunch++;
     }
   }
+  return true;
 }
 
 int fprint_e_beam(FILE * fp, const ring_t ring, const e_beam_t ebeam)
