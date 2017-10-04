@@ -160,6 +160,7 @@ typedef struct tracking
   char jobtitle[80]; /**< Job title */
   char input_filename[FILENAME_MAX]; /**< Path to the input file */
   char work_path[FILENAME_MAX]; /**< Path of the working directory, where output will be writen */
+  char fill_filename[FILENAME_MAX];
   
   int scan; /**< Flag for scan options; 0: no scan, 1: (ring)current scan, 2: chroma scan, 3: Q of HC */
   long int Nscan; /**< Number of scan steps */

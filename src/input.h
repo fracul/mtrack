@@ -68,6 +68,8 @@ int fprintf_bunch_macroparticle_model(FILE * fp, const bunch_macroparticle_model
 
 bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam);
 
+bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm);
+
 int fprint_e_beam(FILE * fp, const ring_t ring, const e_beam_t ebeam);
 
 int e_beam_print(const ring_t ring, const e_beam_t ebeam);

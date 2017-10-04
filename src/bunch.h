@@ -82,6 +82,7 @@ bunch_weak_distribution_t;
 typedef struct e_beam
 {
   int *  nfFill; /**< Filling by bucket. 0: empty,  1: filled  */
+  double * Ib_frac;
   int    Nbunch; /**< Total number of filled bunches in the ring */
   
   bunch_strong_distribution_t distrib;

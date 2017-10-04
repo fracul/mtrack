@@ -49,15 +49,18 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     unsigned int Np = bunchModel.Np; /* WARNING assuming equal number of particles */
     double bunch_Ib, fac;
     
-    if(track.EnableDiffCurr)
+    /*if(track.EnableDiffCurr)
     {
       if(kb%2 == 0) fac = track.current_ratio;
       else fac = 1.0 - track.current_ratio;      
       bunch_Ib = 2 * fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     }
     else
-      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); /* WARNING assuming equal curent in bunches */
+      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); // WARNING assuming equal curent in bunches 
+    */
       
+    fac = ebeam.Ib_frac[kb];
+    bunch_Ib = 2 * fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     MPI_Send(&bunch_Ib, 1, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     ring.Ibunch[kb] = bunch_Ib * FKILO;
@@ -82,7 +85,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
   unsigned int bnum = 0;
-  for(kb = 0; kb < ebeam.Nbunch; kb++)
+  for(kb = 0; kb < ring.Nharm; kb++)
   {
     if (ebeam.nfFill[kb]) {
       /* Send bucket number to each worker */

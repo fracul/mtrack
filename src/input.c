@@ -282,7 +282,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
 {
   int i, j, k, l;
   char section[32] = "";
-  char filling_str[32] = "";
+  char filling_str[FILENAME_MAX] = "";
   char model_str[32] = "";
   char plane_str[32] = "";
   if(fp == NULL)
@@ -298,11 +298,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if(!config_get_str(fp, section, "jobtitle", track->jobtitle))
     return false;
   
-  if(!config_get_str(fp, section, "filling", filling_str)
-     || !scan_filling(filling_str, &(track->filling)))
+  if(!config_get_str(fp, section, "filling", filling_str))
   {
-    fprintf(stderr, "ERROR: Unknown filling pattern \"%s\"\n", filling_str);
-    return false;
+    if (!scan_filling(filling_str, &(track->filling))) {
+      track->filling = -1;
+      strcpy(track->fill_filename,filling_str);
+    }
+    //fprintf(stderr, "ERROR: Unknown filling pattern \"%s\"\n", filling_str);
+    //return false;
   }
   
   if(!config_get_str(fp, section, "BunchModel", model_str)
@@ -1285,7 +1288,9 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   /* Beam filling */
   /* !! No fills with two gaps possible, filled bunches are expected to come one after the other !!! */
   /* otherwise problems in the ampinv statistics ! */
-  if(filling == uniform)     
+  if (filling<0)
+    return e_beam_fileread(&track, &ebeam, ring->Nharm);
+  else if(filling == uniform)
   {
     for(kb=0; kb < ring->Nharm; kb++) ebeam->nfFill[kb] = 1;
     track->Nbunch_out = 1;
@@ -1397,9 +1402,76 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   else return false;
   
   ebeam->Nbunch = 0;
-  for(kb=0; kb<ring->Nharm; kb++) if(ebeam->nfFill[kb]) (ebeam->Nbunch)++;
+  for(kb=0; kb<ring->Nharm; kb++) {
+    if(ebeam->nfFill[kb]) (ebeam->Nbunch)++;
+  }
+  ebeam->Ib_frac = (double *) malloc(ebeam->Nbunch*sizeof(double));
+  for (kb=0; kb<ebeam->Nbunch; kb++) {
+    if(track->EnableDiffCurr) {
+      if (kb%2==0) ebeam->Ib_frac[kb] = track->current_ratio;
+      else ebeam->Ib_frac[kb] = 1.0 - track->current_ratio;
+    }
+    else ebeam->Ib_frac[kb] = 1.0;
+  }
   
   return true;
+}
+
+bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
+  FILE * efp = fopen(track->fill_filename,"r");
+  if (efp==NULL) {
+    fprintf(stderr,"ERROR: %s is not a valid filename or filling pattern.\n", track->fill_filename);
+    return false;
+  }
+
+  unsigned int kb;
+  int nb_tmp, bout_tmp;
+  double crat_tmp;
+  int * bucket_out = (int *) malloc(Nharm*sizeof(int));
+  double * bucket_ratio = (double *) malloc(Nharm*sizeof(double));
+  double crat_tot = 0.0;
+  int Nbout = 0;
+  int Nbunch = 0;
+  for (kb = 0; kb<Nharm; kb++) {
+    if(fscanf(efp,"%d %lf %lf\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
+      return false;
+    while (nb_tmp>kb) {
+      bucket_out[kb] = 0;
+      kb++;
+    }
+    if (bout_tmp) {
+      bucket_out[kb] = 1;
+      Nbout++;
+    }
+    else bucket_out[kb] = 0;
+    if (crat_tmp>0) {
+      ebeam->nfFill[kb] = 1;
+      bucket_ratio[kb] = crat_tmp;
+      crat_tot += crat_tmp;
+      Nbunch++;
+    }
+    else  bucket_ratio[kb] = 0.0;
+  }
+  fclose(efp);
+
+  double crat_mean = crat_tot/Nbunch;
+  track->Nbunch_out = 1*Nbout;
+  track->bunch_out = (int *) malloc(track->Nbunch_out*sizeof(int)); 
+  ebeam->Nbunch = 1*Nbunch;
+  ebeam->Ib_frac = (double *) malloc(ebeam->Nbunch*sizeof(double));
+  Nbout = 0;
+  Nbunch = 0;
+
+  for (kb = 0; kb<Nharm; kb++) {
+    if (bucket_out[kb]) {
+      track->bunch_out[Nbout] = kb;
+      Nbout++;
+    }
+    if (bucket_ratio[kb]>0) {
+      ebeam->Ib_frac[Nbunch] = bucket_ratio[kb]/crat_mean;
+      Nbunch++;
+    }
+  }
 }
 
 int fprint_e_beam(FILE * fp, const ring_t ring, const e_beam_t ebeam)
