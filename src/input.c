@@ -1405,8 +1405,8 @@ bool setup_ring_parameters(ring_t * ring)
   ring->h       = ((int) (ring->frf * FMEGA * ring->Lc / C_LIGHT + 0.5));  
   ring->Nharm   = ring->h;
   ring->Ibunch = (double *) malloc(ring->Nharm*sizeof(double));
-  ring->AmpDependdQH = (ring->CHH+ring->CHV > 0.0);
-  ring->AmpDependdQV = (ring->CVH+ring->CVV > 0.0);
+  ring->AmpDependdQH = (ring->CHH != 0.0) || (ring->CHV != 0.0);
+  ring->AmpDependdQV = (ring->CVH != 0.0) || (ring->CVV != 0.0);
   
   /*** U0 : Energy Loss per Turn [keV]  ***/
   /*** Urad : Radiation Loss Term used in the tracking ***/
