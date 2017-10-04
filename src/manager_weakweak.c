@@ -82,7 +82,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
   unsigned int bnum = 0;
-  for(kb = 0; kb < ebeam.Nbunch; kb++)
+  for(kb = 0; kb < ring.Nharm; kb++)
   {
     if (ebeam.nfFill[kb]) {
       /* Send bucket number to each worker */
