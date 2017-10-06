@@ -11,6 +11,7 @@
 #include "tune.h"
 #include "tracking.h"
 #include "feedback_rf.h"
+#include "feedback_fbt.h"
 
 
 /* Global variables */
@@ -107,6 +108,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   MPI_Send(&(bstats->pos_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);
   MPI_Send(&(bstats->slope), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD);
   MPI_Send(&(bstats->slope_sigma), 3, MPI_DOUBLE, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD); 
+
+  for (i=0; i<ring.fbt_feedback_size; i++)
+    fbt_init(&(ring.fbt_feedback[i]));
   
   /* initialise cyclic array*/
   int Nbin = SelfFieldModel.Ncell;
@@ -116,8 +120,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       rffb_init(ring.rf_feedback);
   
     int Nbin = SelfFieldModel.Ncell;
-    fnp_ring =
-    (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
+    fnp_ring = (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
     
     if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, LON))
       ERROR("fnp_ring_init", return);
@@ -244,6 +247,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   {      
     /* Resonator selffield transformation includes effect of harmonic cavity and RW */
     /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */    
+
+    for(i=0; i<ring.fbt_feedback_size; i++)
+      transform_weak_bunch_fbt(&(ring.fbt_feedback[i]),&bunch,rev);
     
     if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + lr_res_sizetot > 0)
       transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, phasor_end_HOR, phasor_end_VER, fnp_ring, fnp_HOR, fnp_VER);

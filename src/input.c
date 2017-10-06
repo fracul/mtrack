@@ -737,6 +737,45 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
 
 
   /*
+   * [fbt_feedback]
+   */
+  i = 1;
+  snprintf(section,32,"fbt_feedback_%d",i);
+  while (config_have_section(fp,section)){
+    if (i==1)
+      ring->fbt_feedback = (fbt_feedback_t *) malloc(1*sizeof(fbt_feedback_t));
+    else
+      ring->fbt_feedback = (fbt_feedback_t *) realloc(ring->fbt_feedback,i*sizeof(fbt_feedback_t));
+    fbt_feedback_t * fbt = &(ring->rf_feedback[i-1]);
+    fbt->offset_history = NULL;
+
+    if (!config_get_int(fp,section,"tap", &(fbt->tap)))
+      return false;
+
+    if (!config_get_int(fp,section,"downsampling", &(fbt->downsampling)))
+      return false;
+
+    if (!config_get_double(fp,section,"tune",&(fbt->tune)))
+      return false;
+
+    if (!config_get_double(fp,section,"phase",&(fbt->phase)))
+      return false;
+
+    if (!config_get_str(fp,section,"plane",plane_str)
+	|| !scan_plane(plane_str,&(fbt->plane)))
+      return false;
+
+    config_get_fprint = false;  
+    if (!config_get_int(fp,section,"filter",&(fbt->filt_type)))
+      fbt->filt_type = 1;
+    config_get_fprint = true;
+
+    i++;
+    snprintf(section,32,"fbt_feedback_%d",i);
+  }
+  ring->fbt_feedback_size = i-1;
+
+  /*
    * [selffield]
    */
   snprintf(section, 32, "selffield");

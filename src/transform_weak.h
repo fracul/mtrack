@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include "types.h"
 #include "bunch.h"
+#include "feedback_fbt.h"
 
 
 /**
@@ -121,6 +122,9 @@ void
 construct_wake_phasor(double * lr_wake, double * phasor_end, 
                        const selffield_model_t * SelfFieldModel,
 		      const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch, int plane);
+
+void
+transform_weak_bunch_fbt(fbt_feedback_t * fbt, weak_bunch_t * bunch, int rev);
 
 void
 fnp_ring_destroy(double * fnp_ring);

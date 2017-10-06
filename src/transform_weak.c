@@ -7,6 +7,7 @@
 #include "cyclic_array.h"
 #include "confmpi.h"
 #include "feedback_rf.h"
+#include "feedback_fbt.h"
 
 /* Global variables */
 //extern ring_t ring;
@@ -953,6 +954,23 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      phasor_end[l*2 + 1] = V_new[1];   
    }
  }
+
+void
+transform_weak_bunch_fbt(fbt_feedback_t * fbt,weak_bunch_t * bunch,int rev) {
+  unsigned int jp;
+
+  if (fbt->plane==HOR) cyclic_array_set(rev,&(bunch->stats.pos.x),fbt->offset_history);
+  else if (fbt->plane==VER) cyclic_array_set(rev,&(bunch->stats.pos.z),fbt->offset_history);
+  else if (fbt->plane==LON) cyclic_array_set(rev,&(bunch->stats.pos.xtau),fbt->offset_history);
+
+  if (rev>fbt->downsampling*(fbt->tap+1)) {
+    for (jp = 0; jp<bunch->Np; jp++) {
+      if (fbt->plane==HOR) bunch->particles[jp].slope.x += fbt_kick(fbt,rev-fbt->downsampling);
+      if (fbt->plane==VER) bunch->particles[jp].slope.z += fbt_kick(fbt,rev-fbt->downsampling);
+      if (fbt->plane==LON) bunch->particles[jp].slope.xtau += fbt_kick(fbt,rev-fbt->downsampling);
+    }
+  }
+}
 
 void
 fnp_ring_destroy(double * fnp_ring)

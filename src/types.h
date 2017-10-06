@@ -10,6 +10,7 @@
 #include "def.h"
 #include "cyclic_array.h"
 #include "feedback_rf.h"
+#include "feedback_fbt.h"
 
 /**
  * \brief Resonator, can have SelfField effect and/or long-range Wake Field effect
@@ -35,7 +36,7 @@ struct LR_resonator
   unsigned int Nturn; /**< History of Nturn turns is taken into account */
   double * facc; /**< Cosine coefficient of wake field and it's derivatives */
   double * facs; /**< Sine coefficient of wake field and it's derivatives */
-  plane_t plane; /**< Plane: LON, VER, HOR */
+  plane_t plane;  /**< Plane: LON, VER, HOR */
 }
 LR_resonator_t;
 
@@ -108,6 +109,8 @@ typedef struct ring
   double * lr_wake; /** Wake pot. at m*delta_bucket and its (order) drivatives of all lr
   resonators */
   rf_feedback_t * rf_feedback;
+  fbt_feedback_t * fbt_feedback;
+  int fbt_feedback_size;
   int has_rf_feedback;
   
   active_HC_t * active_HC;
