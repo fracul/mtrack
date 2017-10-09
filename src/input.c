@@ -298,10 +298,10 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if(!config_get_str(fp, section, "jobtitle", track->jobtitle))
     return false;
   
-  if(!config_get_str(fp, section, "filling", filling_str))
+  if(config_get_str(fp, section, "filling", filling_str))
   {
     if (!scan_filling(filling_str, &(track->filling))) {
-      track->filling = -1;
+      track->filling = fromfile;
       strcpy(track->fill_filename,filling_str);
     }
     //fprintf(stderr, "ERROR: Unknown filling pattern \"%s\"\n", filling_str);
@@ -1288,8 +1288,8 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   /* Beam filling */
   /* !! No fills with two gaps possible, filled bunches are expected to come one after the other !!! */
   /* otherwise problems in the ampinv statistics ! */
-  if (filling<0)
-    return e_beam_fileread(&track, &ebeam, ring->Nharm);
+  if (filling == fromfile)
+    return e_beam_fileread(track, ebeam, ring->Nharm);
   else if(filling == uniform)
   {
     for(kb=0; kb < ring->Nharm; kb++) ebeam->nfFill[kb] = 1;
@@ -1433,7 +1433,7 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   int Nbout = 0;
   int Nbunch = 0;
   for (kb = 0; kb<Nharm; kb++) {
-    if(fscanf(efp,"%d %lf %lf\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
+    if(fscanf(efp,"%d %lf %d\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
       break;
     while (nb_tmp>kb) {
       bucket_out[kb] = 0;
@@ -1834,7 +1834,8 @@ fprint_resonators(FILE * fp, const ring_t ring, const selffield_model_t SelfFiel
 int ring_destroy(ring_t * ring)
 {
   int i;
-  for(i = 0; i < ring->resonators_size; i++)
+  //for(i = 0; i < ring->resonators_size; i++)
+  if (ring->resonators_size>0)
   {  
     free(ring->resonators);
     ring->resonators = NULL;
