@@ -1435,8 +1435,11 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   for (kb = 0; kb<Nharm; kb++) {
     if(fscanf(efp,"%d %lf %d\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
       break;
+    if (nb_tmp>=Nharm)
+      break;
     while (nb_tmp>kb) {
       bucket_out[kb] = 0;
+      bucket_ratio[kb] = 0;
       kb++;
     }
     if (bout_tmp) {
@@ -1450,7 +1453,10 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
       crat_tot += crat_tmp;
       Nbunch++;
     }
-    else  bucket_ratio[kb] = 0.0;
+    else {
+      bucket_out[kb] = 0.0;
+      bucket_ratio[kb] = 0.0;
+    }
   }
   fclose(efp);
 
