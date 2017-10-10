@@ -1424,7 +1424,7 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
     return false;
   }
 
-  unsigned int kb;
+  unsigned int kb, jb;
   int nb_tmp, bout_tmp;
   double crat_tmp;
   int * bucket_out = (int *) malloc(Nharm*sizeof(int));
@@ -1433,7 +1433,7 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   int Nbout = 0;
   int Nbunch = 0;
   for (kb = 0; kb<Nharm; kb++) {
-    if(fscanf(efp,"%d %lf %d\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
+    if (fscanf(efp,"%d %lf %d\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
       break;
     if (nb_tmp>=Nharm)
       break;
@@ -1442,23 +1442,28 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
       bucket_ratio[kb] = 0;
       kb++;
     }
-    if (bout_tmp) {
-      bucket_out[kb] = 1;
-      Nbout++;
-    }
-    else bucket_out[kb] = 0;
     if (crat_tmp>0) {
       ebeam->nfFill[kb] = 1;
       bucket_ratio[kb] = crat_tmp;
       crat_tot += crat_tmp;
       Nbunch++;
+      if (bout_tmp) {
+	bucket_out[kb] = 1;
+	Nbout++;
+      }
+      else bucket_out[kb] = 0;
     }
     else {
-      bucket_out[kb] = 0.0;
+      bucket_out[kb] = 0;
       bucket_ratio[kb] = 0.0;
     }
   }
   fclose(efp);
+
+  for (jb=kb; jb<Nharm; jb++) {
+    bucket_out[jb] = 0;
+    bucket_ratio[jb] = 0;
+  }
 
   double crat_mean = crat_tot/Nbunch;
   track->Nbunch_out = 1*Nbout;
@@ -1469,13 +1474,13 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   Nbunch = 0;
 
   for (kb = 0; kb<Nharm; kb++) {
-    if (bucket_out[kb]) {
-      track->bunch_out[Nbout] = kb;
-      Nbout++;
-    }
     if (bucket_ratio[kb]>0) {
       ebeam->Ib_frac[Nbunch] = bucket_ratio[kb]/crat_mean;
       Nbunch++;
+      if (bucket_out[kb]) {
+	track->bunch_out[Nbout] = kb;
+	Nbout++;
+      }
     }
   }
   return true;
@@ -1609,7 +1614,7 @@ bool setup_ring_parameters(ring_t * ring)
     LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
     if (lr_resonator->m>0) {
       if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
-      else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
+      else if (!ring->has_rf_feedback) genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
       lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
     }
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
