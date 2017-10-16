@@ -1239,7 +1239,8 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
     return false;
   }
   
-  for(i=0; i<500; i++)
+  ebeam->nfFill = (int *) malloc(ring->Nharm*sizeof(int));
+  for(i=0; i<ring->Nharm; i++)
   {
     ebeam->nfFill[i] = 0;
   }
@@ -1421,6 +1422,7 @@ bool setup_ring_parameters(ring_t * ring)
   //ring->h       = ((int) (ring->wrf / ring->w0));  
   ring->h       = ((int) (ring->frf * FMEGA * ring->Lc / C_LIGHT + 0.5));  
   ring->Nharm   = ring->h;
+  ring->Ibunch  = (double *) malloc(ring->Nharm*sizeof(double));
   
   /*** U0 : Energy Loss per Turn [keV]  ***/
   /*** Urad : Radiation Loss Term used in the tracking ***/

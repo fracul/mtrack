@@ -13,7 +13,7 @@
 #===========================================================================
 #
 
-CFLAGS=-Wall -O2 -lnvToolsExt
+CFLAGS=-Wall -O2
 CUDAFLAGS=-arch=sm_35 -lcuda -lcudart -lcurand -lcublas -lnvToolsExt -fmad=false
 CC=gcc
 MPICC=mpicc -DDEBUG_INPUT
@@ -26,7 +26,7 @@ WEAKWEAK_OBJECTS_NVCC=transform_weak_cuda.o
 
 all : ../mbtrack-mpi
 
-cuda : CFLAGS += -lcuda -lcudart -lcurand -lcublas -DMBTRACK_CUDA	
+cuda : CFLAGS += -lcuda -lcudart -lcurand -lcublas -lnvToolsExt -DMBTRACK_CUDA	
 cuda : ../mbtrack-cuda
 
 debug : MPICC += -DDEBUG -DDEBUG_FLOATING_POINT -g

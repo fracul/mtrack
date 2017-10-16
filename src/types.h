@@ -55,7 +55,7 @@ typedef struct ring
   double E0; /**< Nominal energy [GeV] */
   double Gamma, Gamma2, Gamma3; /**< Relativistic gamma and its powers */
   double Iring; /**< Total ring current [mA] */
-  double Ibunch[500]; /**< Bunch current [mA], WARNING: assuming equal current in bunches */
+  double * Ibunch; /**< Bunch current [mA], WARNING: assuming equal current in bunches */
   double emittanceH; /**< Hor. emittance [nm] */
   double couplbeta; /**< emittance ration (coupling) */
   double Gzix, Gziz; /**< Normalised chromaticity */
