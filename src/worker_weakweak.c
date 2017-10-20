@@ -43,7 +43,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
   unsigned int bnum=0;
   unsigned int i;
-  double phi0_design, vrf_design;
+  //double ring.rf_feedback->phi0_design, ring.rf_feedback->vrf_design;
   for (i=0; i<ring.Nharm; i++)
       if (ebeam.nfFill[i])
       {
@@ -137,11 +137,11 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       double vmbar, phibar;
       rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
       vmbar = vmbar*ring.E0*FKILO;
-      phi0_design = 1*ring.phai0;
-      vrf_design = 1*ring.Vrf0;
-      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
-      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
-      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
+      //ring.rf_feedback->phi0_design = 1*ring.phai0;
+      //ring.rf_feedback->vrf_design = 1*ring.Vrf0;
+      double tmp_numrtor = ring.rf_feedback->vrf_design*sin(ring.rf_feedback->phi0_design)-vmbar*sin(phibar);
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+      ring.phai0 = atan2(tmp_numrtor,ring.rf_feedback->vrf_design*cos(ring.rf_feedback->phi0_design)-vmbar*cos(phibar));
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
     }
   }
@@ -253,9 +253,9 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       double vmbar, phibar;
       rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
       vmbar = vmbar*ring.E0*FKILO;
-      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
-      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
-      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+      double tmp_numrtor = ring.rf_feedback->vrf_design*sin(ring.rf_feedback->phi0_design)-vmbar*sin(phibar);
+      ring.phai0 = atan2(tmp_numrtor,ring.rf_feedback->vrf_design*cos(ring.rf_feedback->phi0_design)-vmbar*cos(phibar));
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
     }
     
