@@ -60,7 +60,7 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     */
       
     fac = ebeam.Ib_frac[kb];
-    bunch_Ib = 2 * fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
+    bunch_Ib = fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     MPI_Send(&bunch_Ib, 1, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     ring.Ibunch[kb] = bunch_Ib * FKILO;

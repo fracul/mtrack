@@ -1618,7 +1618,7 @@ bool setup_ring_parameters(ring_t * ring)
       if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
       else {
 	genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
-	vb = 4*ring->Iring*lr_resonator->Rs*cos(genphase)*FMILLI/FMEGA;
+	vb = 2*ring->Iring*lr_resonator->Rs*cos(genphase)*FMILLI/FMEGA;
       }
     }
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
@@ -1633,6 +1633,7 @@ bool setup_ring_parameters(ring_t * ring)
       Ntmp = lr_resonator->Nbu;
   }
   ring->phai0 = asin(mult * ring->q) - 0*genphase/2.0;
+  //ring->phai0 = asin
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
 
@@ -1646,6 +1647,7 @@ bool setup_ring_parameters(ring_t * ring)
     if (rf_fb->len_average==-1) ring->has_rf_feedback = 0;
     else if (fabs(rf_fb->len_average)>ring->Nbumax) ring->Nbumax = fabs(rf_fb->len_average);
   }
+  else ring->phai0 += asin(vb/ring->Vrf0*cos(ring->phai0+genphase));
 
   if (ring->ac<0) ring->phai0 = M_PI-ring->phai0;
    
