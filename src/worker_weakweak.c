@@ -43,6 +43,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
   unsigned int bnum=0;
   unsigned int i;
+  bool fb_off = false;
   //double ring.rf_feedback->phi0_design, ring.rf_feedback->vrf_design;
   for (i=0; i<ring.Nharm; i++)
       if (ebeam.nfFill[i])
@@ -64,6 +65,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
   MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
+
   
   /* Recieve bunch number from manager */
   int kb;
@@ -112,8 +114,13 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   int Nbin = SelfFieldModel.Ncell;
   if(ring.longrange_resonators_size[LON] > 0)
   {
-    if (ring.has_rf_feedback)
+    if (ring.has_rf_feedback) {
+      if (ring.rf_feedback->len_average<0) {
+	ring.rf_feedback->len_average = -1*ring.rf_feedback->len_average;
+	fb_off = true;
+      }
       rffb_init(ring.rf_feedback);
+    }
   
     int Nbin = SelfFieldModel.Ncell;
     fnp_ring =
@@ -143,6 +150,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
       ring.phai0 = atan2(tmp_numrtor,ring.rf_feedback->vrf_design*cos(ring.rf_feedback->phi0_design)-vmbar*cos(phibar));
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
+      if (fb_off) ring.has_rf_feedback = 0;
     }
   }
   if(track.TrackPlane[HOR] && ring.longrange_resonators_size[HOR] > 0)
