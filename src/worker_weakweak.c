@@ -432,6 +432,10 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   {
     printf("\n WARNING - Binning for selffields bunch #%d:\n %d particles below first bin,    %d particles above last bin\n", kb, bunch.N_trash_low, bunch.N_trash_high);
   }
+
+  if(bunch.kb_out==1 && ring.has_rf_feedback) {
+    printf("\nFinal RF voltage and phase: %.7f MV, %.5f\n",ring.Vrf0,ring.phai0);
+  }
   
   selffield_model_destroy(&SelfFieldModel);
   weak_bunch_destroy(&bunch);
