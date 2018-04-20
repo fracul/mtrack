@@ -1533,9 +1533,7 @@ bool setup_ring_parameters(ring_t * ring)
   
   /* Parameters */
 
-  ring->T0      = ring->Lc / C_LIGHT; /*SI*/
   ring->R       = ring->Lc / (2.0*M_PI); /*SI*/
-  ring->w0      = (2.0*M_PI) / ring->T0; /*SI*/
   ring->Gamma   = 1957.0*ring->E0; /* E0 in GeV needed */  /*SI*/
   ring->Gamma2  = ring->Gamma * ring->Gamma; /*SI*/
   ring->Gamma3  = ring->Gamma * ring->Gamma2; /*SI*/
@@ -1543,6 +1541,8 @@ bool setup_ring_parameters(ring_t * ring)
   //ring->h       = ((int) (ring->wrf / ring->w0));  
   ring->h       = ((int) (ring->frf * FMEGA * ring->Lc / C_LIGHT + 0.5));  
   ring->Nharm   = ring->h;
+  ring->T0     = ring->Nharm/ring->frf/FMEGA;
+  ring->w0      = (2.0*M_PI) / ring->T0; /*SI*/
   ring->Ibunch = (double *) malloc(ring->Nharm*sizeof(double));
   
   /*** U0 : Energy Loss per Turn [keV]  ***/
