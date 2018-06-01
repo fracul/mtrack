@@ -775,7 +775,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  void
  wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam, int plane)
  {
-   int i, j, k, l;
+   int i, j, k, l, m;
    double V_old[2], V_new[2], progress[2], C[2], prog2beam[2], progb2beam[2];
    
    // Determines the phasor after all bunches have Nturn-times passed
@@ -817,8 +817,9 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      
      for(k=0; k<Nturns; k++)
      {
-       for(i=0; i<ring->h; i++)
+       for(m=0; m<ring->h; m++)
        {
+         i = ring->h - m - 1;
 	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
@@ -868,7 +869,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
                        const selffield_model_t * SelfFieldModel,
                        const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch, int plane)
  {
-   int i, j, l;
+   int i, j, l, m;
    double progress[2];
    double C[2];
    double V_old[2];
@@ -909,8 +910,9 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
      progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
      
-     for(i=0; i<ring->h; i++)
+     for(m=0; m<ring->h; m++)
      {
+       i = ring->h - m - 1;
        if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
