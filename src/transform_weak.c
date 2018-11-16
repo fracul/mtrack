@@ -485,8 +485,9 @@ int
 transform_weak_bunch_selffield(weak_bunch_t * bunch,
                                const selffield_model_t SelfFieldModel, 
                                const cyclic_array_t * all_moments, const ring_t *ring,
-                               long unsigned int rev, FILE * fp, double scan_val, int kb, 
-			       e_beam_t * ebeam, double * phasor_end,  double * fnp_ring)
+                               long unsigned int rev, FILE * fp, double scan_val, int kb, e_beam_t * ebeam, 
+			       double * phasor_end,  double * phasor_end_HOR, double * phasor_end_VER,
+			       double * fnp_ring, double * fnp_HOR, double * fnp_VER)
 
 {
   unsigned jp;
@@ -501,6 +502,8 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   double dipoleV[SelfFieldModel.Ncell], GlambdaV[SelfFieldModel.Ncell];
   double dipoleH[SelfFieldModel.Ncell], GlambdaH[SelfFieldModel.Ncell];
   double lr_wake[SelfFieldModel.Ncell];
+  double lr_wake_HOR[SelfFieldModel.Ncell];
+  double lr_wake_VER[SelfFieldModel.Ncell];
   
   /*---------------------------------------------------------------------------------------------------*/
   /*      The way how the Greens function and the wake potential are computed follows completely       
@@ -527,6 +530,8 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   memset(GlambdaV, 0.0, sizeof(GlambdaV));
   memset(GlambdaH, 0.0, sizeof(GlambdaH));
   memset(lr_wake, 0.0, sizeof(lr_wake)); 
+  memset(lr_wake_VER, 0.0, sizeof(lr_wake_HOR)); 
+  memset(lr_wake_HOR, 0.0, sizeof(lr_wake_VER)); 
   
   /* Assigning a bin to every particle */
   int icellmin, icellmax;
@@ -610,12 +615,18 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
         }
   }
   
-      //Construction of the longrange wake potential:
-  if(ring->longrange_resonators_size > 0)
+  //Construction of the longrange wake potential:
+  if(ring->longrange_resonators_size[LON] > 0)
     construct_wake_phasor(lr_wake, phasor_end, &SelfFieldModel,
-                          ring, kb, fnp_ring, ebeam, bunch);    
+                          ring, kb, fnp_ring, ebeam, bunch, LON);    
+  if(ring->longrange_resonators_size[HOR] > 0)
+    construct_wake_phasor(lr_wake_HOR, phasor_end_HOR, &SelfFieldModel,
+                          ring, kb, fnp_HOR, ebeam, bunch, HOR);    
+  if(ring->longrange_resonators_size[VER] > 0)
+    construct_wake_phasor(lr_wake_VER, phasor_end_VER, &SelfFieldModel,
+                          ring, kb, fnp_VER, ebeam, bunch, VER);    
   
-  if(ring->longrange_resonators_size + SelfFieldModel.PlaneL > 0)
+  if(ring->longrange_resonators_size[LON] + SelfFieldModel.PlaneL > 0)
   {
     // Total effect of wake potentials
     for (jp = 0; jp < bunch->Np; jp++)
@@ -634,7 +645,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
       GlambdaV[icell] = 1*Gn;
     }    
     for (jp = 0; jp < bunch->Np; jp++)
-      bunch->particles[jp].slope.z += -factG * GlambdaV[mapcell[jp]];
+      bunch->particles[jp].slope.z += -factG * GlambdaV[mapcell[jp]] + lr_wake_VER[mapcell[jp]];
   }
   
   //**********************************************************************************//
@@ -648,7 +659,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
       GlambdaH[icell] = 1*Gn;
     }    
     for (jp = 0; jp < bunch->Np; jp++)
-      bunch->particles[jp].slope.x += -factG * GlambdaH[mapcell[jp]];
+      bunch->particles[jp].slope.x += -factG * GlambdaH[mapcell[jp]] + lr_wake_HOR[mapcell[jp]];
   }
   
   //**********************************************************************************//
@@ -757,7 +768,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
 
  /* determines macroparicles per bin before first turn  for bunch kb*/
  int
- fnp_ring_update(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb)
+ fnp_ring_update(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, int plane)
  {
    int jp, icell;
    int Nbin = SelfFieldModel->Ncell;
@@ -777,7 +788,9 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      
      if(icell >= 0 &&  icell < Nbin)
      {       
-        fnp_ring[kb*Nbin + icell] += 1.0; //counts macroparticles per cell     
+       if (plane==LON) fnp_ring[kb*Nbin + icell] += 1.0; //counts macroparticles per cell
+       else if (plane==HOR) fnp_ring[kb*Nbin + icell] += particle->pos.x;
+       else if (plane==VER) fnp_ring[kb*Nbin + icell] += particle->pos.z;
      }
    } 
    return 1;
@@ -785,17 +798,15 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  
 
  void
- wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, 
-		  weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam)
+ wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam, int plane)
  {
    int i, j, k, l, m;
    double V_old[2], V_new[2], progress[2], C[2], prog2beam[2], progb2beam[2];
    
    // Determines the phasor after all bunches have Nturn-times passed
-   for(l = 0; l < ring->longrange_resonators_size; l++)
+   for(l = 0; l < ring->longrange_resonators_size[plane]; l++)
    {
-     
-     LR_resonator_t * lr_res = &(ring->longrange_resonators[l]);   
+     LR_resonator_t * lr_res = &(ring->longrange_resonators[plane][l]);   
      double alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
      double Amp = 2 * alpha * lr_res->Rs * ring->T0 / ring->E0 / FGIGA;
      double dTau = SelfFieldModel->dT * SelfFieldModel->sigma_tau; // Bin-width
@@ -818,7 +829,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
 
      double taubeam=0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
        taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
        taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
        //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
@@ -834,7 +845,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
        for(m=0; m<ring->h; m++)
        {
          i = ring->h - m - 1;
-	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
          if(ebeam->nfFill[i] == 1)
@@ -863,7 +874,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
-	 if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
        }
      }
@@ -881,8 +892,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  void
  construct_wake_phasor(double * lr_wake, double * phasor_end, 
                        const selffield_model_t * SelfFieldModel,
-                       const ring_t * ring, int kb, const double * fnp, 
-		       e_beam_t * ebeam, weak_bunch_t * bunch)
+                       const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch, int plane)
  {
    int i, j, l, m;
    double progress[2];
@@ -893,9 +903,9 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
    double progb2beam[2];
    
    // Determines the phasor after all bunches have passed and stores the sum in lr_wake
-   for(l = 0; l < ring->longrange_resonators_size; l++)
+   for(l = 0; l < ring->longrange_resonators_size[plane]; l++)
    {     
-     LR_resonator_t * lr_res = &(ring->longrange_resonators[l]);
+     LR_resonator_t * lr_res = &(ring->longrange_resonators[plane][l]);
      double alpha =  lr_res->wr * 0.5 / lr_res->Qfactor;
      double Amp = 2 * alpha * lr_res->Rs * ring->T0 / ring->E0 / FGIGA;
      double dTau = SelfFieldModel->dT * SelfFieldModel->sigma_tau; // Bin-width
@@ -914,7 +924,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      V_new[1] = phasor_end[l*2 + 1];
      double taubeam = 0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1) {
+     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
        taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
        taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
        //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
@@ -928,7 +938,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      for(m=0; m<ring->h; m++)
      {
        i = ring->h - m - 1;
-       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
        if(ebeam->nfFill[i] == 1)
@@ -961,7 +971,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
          V_old[0] = V_new[0];
          V_old[1] = V_new[1];
        }
-       if (ring->has_rf_feedback && ring->rf_feedback->lr_resonator==l+1)
+       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
 	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
      }    
      phasor_end[l*2] = V_new[0];

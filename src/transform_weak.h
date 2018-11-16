@@ -73,7 +73,8 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
 			       const selffield_model_t SelfFieldModel, 
 			       const cyclic_array_t * all_moments, const ring_t *ring,
 			       long unsigned int rev, FILE * fp, double scan_val, int kb, 
-			       e_beam_t * ebeam, double * phasor_end, double * fnp_ring);
+			       e_beam_t * ebeam, double * phasor_end, double * phasor_end_HOR, double * phasor_end_VER,
+			       double * fnp_ring, double * fnp_HOR, double * fnp_VER);
 
 
 /**
@@ -101,7 +102,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  * @param fnp_ring result variable
  */
 int
-fnp_ring_update(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb);
+fnp_ring_update(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, int plane);
 
 
 /**
@@ -109,7 +110,7 @@ fnp_ring_update(ring_t * ring, double * fnp_ring, const selffield_model_t * Self
  * @param phasor_end result variable
  */
 void
-wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam);
+wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * SelfFieldModel, weak_bunch_t * bunch, int kb, double * phasor_end, e_beam_t * ebeam, int plane);
 
 
 /**
@@ -118,8 +119,8 @@ wake_phasor_init(ring_t * ring, double * fnp_ring, const selffield_model_t * Sel
  */
 void
 construct_wake_phasor(double * lr_wake, double * phasor_end, 
-		      const selffield_model_t * SelfFieldModel,
-		      const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch);
+                       const selffield_model_t * SelfFieldModel,
+		      const ring_t * ring, int kb, const double * fnp, e_beam_t * ebeam, weak_bunch_t * bunch, int plane);
 
 void
 fnp_ring_destroy(double * fnp_ring);

@@ -29,6 +29,7 @@
 /* Fillings, do not change numerical values */
 typedef enum
 {
+  FROMFILE = -1,
   UNIFORM = 0,
   ONETHIRD = 1,
   TWOTHIRD = 2,
@@ -46,7 +47,7 @@ typedef enum
 filling_t;
 
 /* Filling constants, for compatibility */
-
+#define fromfile      FROMFILE
 #define uniform       UNIFORM
 #define onefourth     ONEFOURTH
 #define onethird      ONETHIRD

@@ -49,15 +49,18 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     unsigned int Np = bunchModel.Np; /* WARNING assuming equal number of particles */
     double bunch_Ib, fac;
     
-    if(track.EnableDiffCurr)
+    /*if(track.EnableDiffCurr)
     {
       if(kb%2 == 0) fac = track.current_ratio;
       else fac = 1.0 - track.current_ratio;      
       bunch_Ib = 2 * fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     }
     else
-      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); /* WARNING assuming equal curent in bunches */
+      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); // WARNING assuming equal curent in bunches 
+    */
       
+    fac = ebeam.Ib_frac[kb];
+    bunch_Ib = fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     MPI_Send(&bunch_Ib, 1, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     ring.Ibunch[kb] = bunch_Ib * FKILO;
@@ -118,11 +121,28 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   fprintf(bstats_fp, "\n");
   weak_bunch_reset_statistics(&allstats);
   
-  
-  if(ring.longrange_resonators_size > 0)
+  unsigned int i;
+  double ttrash[SelfFieldModel->Ncell];  
+  if(ring.longrange_resonators_size[LON] > 0)
   {
-    unsigned int i;
-    double ttrash[SelfFieldModel->Ncell];
+    for(i = 0; i < ring.Nharm; i++)
+      if(ebeam.nfFill[i])           
+      {
+        /* Broadcast from workers to workers, manager does not nead the info -> trash */
+        MPI_Bcast(ttrash, SelfFieldModel->Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);        
+      }
+  }
+  if(track.TrackPlane[HOR] && ring.longrange_resonators_size[HOR] > 0)
+  {
+    for(i = 0; i < ring.Nharm; i++)
+      if(ebeam.nfFill[i])           
+      {
+        /* Broadcast from workers to workers, manager does not nead the info -> trash */
+        MPI_Bcast(ttrash, SelfFieldModel->Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);        
+      }
+  }
+  if(track.TrackPlane[VER] &&  ring.longrange_resonators_size[VER] > 0)
+  {
     for(i = 0; i < ring.Nharm; i++)
       if(ebeam.nfFill[i])           
       {
@@ -207,16 +227,35 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       {
         const long int irevmon = rev/track.NrevMon;
         MPI_Recv(&(CMhist.ampinv[irevmon * ebeam.Nbunch + kb]), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-        MPI_Recv(&(CMhist.ampinv_cm[irevmon * ebeam.Nbunch + kb]), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);       
+        MPI_Recv(&(CMhist.ampinv_cm[irevmon * ebeam.Nbunch + kb]), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	CMhist.cm[irevmon * ebeam.Nbunch + kb] = bstats->pos;
       }
       weak_bunch_add_statistics(&allstats, bstats);
     }
     Nstat++;
     
-    if(ring.longrange_resonators_size > 0)
+    unsigned int i;
+    double ttrash[SelfFieldModel->Ncell];
+    if(ring.longrange_resonators_size[LON] > 0)
     {
-      unsigned int i;
-      double ttrash[SelfFieldModel->Ncell];
+      for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+        {
+          /* Broadcast from workers to workers, manager does not nead the info -> trash */
+          MPI_Bcast(ttrash, SelfFieldModel->Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+        }
+    }
+    if(track.TrackPlane[HOR] && ring.longrange_resonators_size[HOR] > 0)
+    {
+      for(i = 0; i < ring.Nharm; i++)
+        if(ebeam.nfFill[i])
+        {
+          /* Broadcast from workers to workers, manager does not nead the info -> trash */
+          MPI_Bcast(ttrash, SelfFieldModel->Ncell, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+        }
+    }
+    if(track.TrackPlane[VER] && ring.longrange_resonators_size[VER] > 0)
+    {
       for(i = 0; i < ring.Nharm; i++)
         if(ebeam.nfFill[i])
         {
@@ -279,10 +318,15 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   /* Writeout ampinv history */
   //if(track.EnableAmpinv_out)
   //{
-  if(track.TrackPlane[HOR])
+  weak_bunch_writeout_tbtbbb(track.NrevTot, track.NrevMon, &CMhist, ebeam, LON, scan_val_hist);
+  if(track.TrackPlane[HOR]){
     weak_bunch_writeout_mean_ampinv(track.NrevTot, track.NrevMon, &CMhist, ebeam, HOR, scan_val_hist);
-  if(track.TrackPlane[VER])
+    weak_bunch_writeout_tbtbbb(track.NrevTot, track.NrevMon, &CMhist, ebeam, HOR, scan_val_hist);
+  }
+  if(track.TrackPlane[VER]){
     weak_bunch_writeout_mean_ampinv(track.NrevTot, track.NrevMon, &CMhist, ebeam, VER, scan_val_hist);
+    weak_bunch_writeout_tbtbbb(track.NrevTot, track.NrevMon, &CMhist, ebeam, VER, scan_val_hist);
+  }
   //}
   
   /* free memory */
