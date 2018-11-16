@@ -751,7 +751,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
    double Tau;
    
    for(icell=0; icell < Nbin; icell++)
-     fnp_ring[kb*Nbin + icell] = 0.0;     
+     fnp_ring[kb*Nbin + icell] = 0.0;    
      
 
    particle_t * particle;

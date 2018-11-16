@@ -22,25 +22,28 @@ fbt_init(fbt_feedback_t * fbt) {
 void
 fbt_calc_coeffs_Dimtel(fbt_feedback_t * fbt) {
   int t;
-  double norm;
+  double norm = 0;
   for (t=0; t<fbt->tap; t++) {
-    double coeff_tmp = sin(2.0*M_PI*fbt->tune+fbt->phase);
+    double coeff_tmp = sin(2.0*M_PI*fbt->tune*t+fbt->phase*M_PI/180.0);
     norm += coeff_tmp;
     fbt->coeffs_FIR[t] = coeff_tmp; 
   }
   norm = norm/fbt->tap;
 
-  for (t=0; t<fbt->tap; t++) {
-    fbt->coeffs_FIR[t] = fbt->coeffs_FIR[t]-norm;
+  if (fbt->tap>1) {
+    for (t=0; t<fbt->tap; t++) {
+      fbt->coeffs_FIR[t] = fbt->coeffs_FIR[t]-norm;
+    }
   }
 }
 
 void
 fbt_calc_coeffs_Spring8(fbt_feedback_t * fbt){
   int t;
-  double depha = fbt->phase;
+  double depha = fbt->phase*M_PI/180.0;
   double * par1, * par2, * par3, * par4; 
-  double norm_1, norm_2;
+  double norm_1 = 0;
+  double norm_2 = 0;
   FIR_coeff(fbt->tap,fbt->tune,&par1,&par2,&par3,&par4);
   for (t=0; t<fbt->tap; t++) {
     double coeff_tmp =  sin(depha)*(par1[t]-par3[t])-cos(depha)*(par2[t]-par4[t])
@@ -57,9 +60,10 @@ fbt_calc_coeffs_Spring8(fbt_feedback_t * fbt){
 double
 fbt_kick(fbt_feedback_t * fbt, int rev) {
   int t;
-  double fbt_kick;
+  double fbt_kick = 0;
   for (t=0;t<fbt->tap; t++) {
-    int index = rev-(fbt->tap-t)*fbt->downsampling;
+    //int index = rev-(fbt->tap-t-1)*fbt->downsampling;
+    int index = rev-t*fbt->downsampling;
     fbt_kick += fbt->coeffs_FIR[t]*cyclic_array_get(index,fbt->offset_history)[0];
   }
   
