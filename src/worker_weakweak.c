@@ -80,9 +80,13 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   /* Initialize selffield model, and allocate memory */
   if(!selffield_model_init(&SelfFieldModel, bunchModel.pos_sgm.xtau, &bunch))
     ERROR("selffield_model_init", return);
+
   /* Construct Greensfunctions for all given resonators */
-  
   if(ring.resonators_size > 0)
+    construct_greensfunc_resonator(&SelfFieldModel, &ring);
+
+  /* Add Green's functions from files */
+  if(ring.wakefiles_size > 0)
     construct_greensfunc_resonator(&SelfFieldModel, &ring);
   
   /* Adding RW wake to SelfFieldModel */

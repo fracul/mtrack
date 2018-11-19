@@ -23,6 +23,13 @@ typedef struct resonator
 }
 resonator_t;
 
+typedef struct wakefile
+{
+  char filename[FILENAME_MAX];
+  plane_t plane;
+}
+wakefile_t;
+
 typedef
 struct LR_resonator
 {
@@ -103,6 +110,9 @@ typedef struct ring
    
   resonator_t * resonators; /**< List of resonators used for selffields */
   unsigned resonators_size; /**< Number of shortrange resonators for selffield */
+
+  wakefile_t * wakefiles;
+  unsigned wakefiles_size;
   
   LR_resonator_t * longrange_resonators[3];  /**< Longrange resonator, acts over several turns */
   unsigned longrange_resonators_size[3]; /** number of lr resonators */

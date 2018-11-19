@@ -402,7 +402,78 @@ construct_greensfunc_resonator(selffield_model_t * SelfFieldModel,
   return 1;
 } /* end fuction */
 
+int
+construct_greensfunc_file(selffield_model_t * SelfFieldModel,
+                          const ring_t * ring)
+{
+  const double dTau = SelfFieldModel->sigma_tau*SelfFieldModel->dT;
+  unsigned i,j,k;
 
+  for (j=0; j<ring->wakefiles_size; j++) {
+
+    FILE * wp = fopen(ring->wakefiles[j].filename,"r");
+    if (wp==NULL) {
+      fprintf(stderr,"ERROR: Cannot open file %s for reading.\n",ring->wakefiles[j].filename);
+      return false;
+    }
+
+    double Gtmp[SelfFieldModel->Ncell];
+    char str80[81];
+    double t, w;
+    do {
+      c_strng(wp,str80,80);
+      sscanf(str80,"%lf%lf",&(t),&(w));
+    } while(t<0);
+
+    double wsum = 0;
+    unsigned wcount = 0;
+    double last_t = 0;
+    double last_w = 0;
+    int last_i = 0;
+    Gtmp[0] = 0;
+    for (i=0; i<SelfFieldModel->Ncell; i++) {
+      //else {
+      while (t<(i+1)*dTau){
+        wsum += w;
+        wcount++;
+        c_strng(wp,str80,80);
+        last_t = 1*t;
+        last_w = 1*w;
+        sscanf(str80,"%lf%lf",&(t),&(w));
+      }
+      double wake_ave = wsum/wcount;
+      Gtmp[i] = wake_ave;
+      if (t>(i+1)*dTau) {
+        while (t>(i+1)*dTau) i++;
+      }
+      if (i>last_i+1) {
+        for (k=last_i+1; k<i+1; k++)
+          Gtmp[k] = (w*(k*dTau-last_t)+last_w*(t-k*dTau))/(t-last_t);
+      }
+      last_i = 1*i;
+      last_t = 1*t;
+      last_w = 1*w;
+      wsum = 0;
+      wcount = 0;
+    }//end of loop through cells
+    switch(ring->wakefiles[j].plane) {
+    case LON:
+      Gtmp[0] = Gtmp[0]/2.;
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gl[i] += Gtmp[i];
+      SelfFieldModel->PlaneL++;
+      break;
+    case HOR:
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gh[i] += Gtmp[i];
+      SelfFieldModel->PlaneH++;
+      break;
+    case VER:
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gv[i] += Gtmp[i];
+      SelfFieldModel->PlaneV++;
+      break;
+    }
+  }//end of loop through files
+  return 1;
+}
 
 int
 construct_greensfunc_RW(selffield_model_t * SelfFieldModel, 

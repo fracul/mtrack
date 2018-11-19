@@ -48,6 +48,14 @@ int
 construct_greensfunc_resonator(selffield_model_t * SelfFieldModel,
                      const ring_t * ring);
 
+/**
+ * Takes the Greens Function from files in all (tracked) planes and performs the necessary interpolation
+ * 
+ * @param SelfFieldModel Binned selffield including given Green's functions from files
+ */
+int
+construct_greensfunc_file(selffield_model_t * SelfFieldModel,
+                     const ring_t * ring);
 
 /**
  * Calculates the Greens Function contribution of the RW impedance in all (tracked) planes

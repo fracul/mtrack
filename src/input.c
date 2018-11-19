@@ -604,6 +604,25 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     snprintf(section, 32, "resonator_%d", i);
   }
   ring->resonators_size = i-1;
+
+  i = 1;
+  ring->wakefiles = (wakefile_t *) malloc(i*sizeof(wakefile_t));
+  snprintf(section, 32, "wake_file_%d", i);
+  while(config_have_section(fp,section))
+  {
+    ring->wakefiles = (wakefile_t *) realloc(ring->wakefiles,i*sizeof(wakefile_t));
+    wakefile_t * wf = &(ring->wakefiles[i-1]);
+
+    if (!config_get_str(fp,section,"filename",wf->filename))
+      return false;
+
+    if (!config_get_str(fp,section,"plane",plane_str) || !scan_plane(plane_str, &(wf->plane)))
+      return false;
+
+    i++;
+    snprintf(section, 32, "wake_file_%d", i);
+  }
+  ring->wakefiles_size = i-1;
   
   /*
    * [harmonic_cavity_1], [harmonic_cavity_2], ...
@@ -769,7 +788,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   
   config_get_fprint = true;  
   int lr_res_tot = ring->longrange_resonators_size[LON]+ring->longrange_resonators_size[HOR]+ring->longrange_resonators_size[VER];
-  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0)
+  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0 || ring->wakefiles_size > 0)
   {
     if(!config_have_section(fp, section))
       return false;
