@@ -87,7 +87,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
 
   /* Add Green's functions from files */
   if(ring.wakefiles_size > 0)
-    construct_greensfunc_resonator(&SelfFieldModel, &ring);
+    construct_greensfunc_file(&SelfFieldModel, &ring);
   
   /* Adding RW wake to SelfFieldModel */
   if(track.EnableRW_short)

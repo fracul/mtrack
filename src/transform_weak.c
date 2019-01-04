@@ -421,40 +421,35 @@ construct_greensfunc_file(selffield_model_t * SelfFieldModel,
     char str80[81];
     double t, w;
     do {
-      c_strng(wp,str80,80);
-      sscanf(str80,"%lf%lf",&(t),&(w));
+      //c_strng(wp,str80,80);
+      if (fscanf(wp,"%lf%lf",&(t),&(w)) != 2)
+	break;
     } while(t<0);
 
-    double wsum = 0;
-    unsigned wcount = 0;
     double last_t = 0;
     double last_w = 0;
-    int last_i = 0;
+    int last_i = -1;
+    bool eof = false;
     Gtmp[0] = 0;
     for (i=0; i<SelfFieldModel->Ncell; i++) {
-      //else {
-      while (t<(i+1)*dTau){
-        wsum += w;
-        wcount++;
-        c_strng(wp,str80,80);
+      if (eof) {
+	Gtmp[i] = Gtmp[i-1];
+      }
+      while (t<=i*dTau){
         last_t = 1*t;
         last_w = 1*w;
-        sscanf(str80,"%lf%lf",&(t),&(w));
+        if (fscanf(wp,"%lf %lf\n",&(t),&(w))!=2) {
+	  eof = true;
+	  break;
+	}
       }
-      double wake_ave = wsum/wcount;
-      Gtmp[i] = wake_ave;
-      if (t>(i+1)*dTau) {
-        while (t>(i+1)*dTau) i++;
-      }
+      while (t>(i+1)*dTau) i++;
+      for (k=last_i+1; k<i+1; k++)
+	Gtmp[k] = (w*(k*dTau-last_t)+last_w*(t-k*dTau))/(t-last_t);
       if (i>last_i+1) {
-        for (k=last_i+1; k<i+1; k++)
-          Gtmp[k] = (w*(k*dTau-last_t)+last_w*(t-k*dTau))/(t-last_t);
+	i--;
       }
       last_i = 1*i;
-      last_t = 1*t;
-      last_w = 1*w;
-      wsum = 0;
-      wcount = 0;
     }//end of loop through cells
     switch(ring->wakefiles[j].plane) {
     case LON:
