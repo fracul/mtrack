@@ -10,6 +10,7 @@
 #include "def.h"
 #include "cyclic_array.h"
 #include "feedback_rf.h"
+#include "mode_feedback.h"
 
 /**
  * \brief Resonator, can have SelfField effect and/or long-range Wake Field effect
@@ -122,6 +123,9 @@ typedef struct ring
   resonators */
   rf_feedback_t * rf_feedback;
   int has_rf_feedback;
+
+  mode_feedback_t * mode_feedback;
+  int mode_feedback_size;
   
   active_HC_t * active_HC;
   unsigned active_HC_size;
@@ -276,5 +280,13 @@ typedef struct weak_bunch
   */
 }
 weak_bunch_t;
+
+/*typedef struct mode_feedback
+{
+  int mode;
+  double gain;
+  int diff_delay;
+  double output_phase;
+  } mode_feedback_t;*/
 
 #endif /* MBTRACK_TYPES_H */

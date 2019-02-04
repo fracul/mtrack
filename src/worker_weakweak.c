@@ -11,6 +11,7 @@
 #include "tune.h"
 #include "tracking.h"
 #include "feedback_rf.h"
+//#include "mode_feedback.h"
 
 
 /* Global variables */
@@ -200,12 +201,12 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   
   
   /* initialise cyclic array*/
-  if(track.EnableRW_long > 0)
+  if(track.EnableRW_long > 0 || ring.mode_feedback_size>0)
   {
     /* analog to longrange_resonators */
-    if(!cyclic_array_create(&dipole_RW, (track.Nmlt+2)*ring.Nharm, 2))
+    if(!cyclic_array_create(&dipole_RW, (track.Nmlt+2)*ring.Nharm, 3))
       ERROR("cyclic_array_create", return);
-    double bunch_dipole[2] = {bstats->pos.x, bstats->pos.z};
+    double bunch_dipole[3] = {bstats->pos.x, bstats->pos.z, bstats->pos.xtau};
     cyclic_array_set(kb, &bunch_dipole[0], &dipole_RW);
     unsigned int i, j;
     for(i = 0; i < ring.Nharm; i++)
@@ -259,7 +260,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   for(rev = 0; rev < track.NrevTot; rev++)
   {      
     /* Resonator selffield transformation includes effect of harmonic cavity and RW */
-    /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */    
+    /* PlaneL etc give information if a resonator in this plane is given AND if plane is tracked */
     
     if(SelfFieldModel.PlaneL + SelfFieldModel.PlaneV + SelfFieldModel.PlaneH + lr_res_sizetot > 0)
       transform_weak_bunch_selffield(&bunch, SelfFieldModel, &moments_history, &ring, rev, trafo_fp, scan_val, kb, &ebeam, phasor_end, phasor_end_HOR, phasor_end_VER, fnp_ring, fnp_HOR, fnp_VER);
@@ -275,6 +276,17 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
 
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
+    }
+
+    /* Mode feedback applied to RF voltage */
+    for (i=0; i<ring.mode_feedback_size; i++) {
+      mode_feedback_t * mfb = &(ring.mode_feedback[i]);
+      if (rev>mfb->diff_delay) {
+        const int bpos = -(rev-1)*ring.Nharm + kb;  //Actual position of bunch kb in cyclic array
+	double phidiff;
+	modefb_get_phidiff(mfb,&dipole_RW,bpos,&ring,&ebeam,&phidiff);
+	ring.phai0 += phidiff;
+      }
     }
     
     /* Optics transformaiton including quantum excitation & radiation damping and active or passive HC*/
@@ -303,11 +315,12 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     }
     
     /* update cyclic array with actual statistics */
-    if(track.EnableRW_long > 0)
+    if(track.EnableRW_long > 0 || ring.mode_feedback_size>0)
     {
       double * mom = cyclic_array_access(-rev*ring.Nharm + kb, &dipole_RW);
       mom[0] = bstats->pos.x;
       mom[1] = bstats->pos.z;
+      mom[2] = bstats->pos.xtau;
       unsigned int i;
       for(i = 0; i < ring.Nharm; i++)
         if(ebeam.nfFill[i])
@@ -337,7 +350,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
        * by receiving the CM information of all filled bunches from the master
        * We shall keep this original structure in view of including the RW effects
        * in future.
-       */       
+       */
       if(track.TrackPlane[HOR])
       {
         const int bpos = -rev*ring.Nharm + kb;  //Actual position of bunch kb in cyclic array
@@ -349,7 +362,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
         const int bpos = -rev*ring.Nharm + kb;  //Actual position of bunch kb in cyclic array
         if(transform_weak_bunch_RW_longrange_cyclic(m, bpos, &dipole_RW, VER, &bunchModel, &ebeam, &bunch, &ring, &track) < 0)
           fprintf(stderr, "Error ! transformSbunch_longrange VER failed\n");
-      }      
+      }    
       m++;
     }
     
@@ -413,7 +426,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     if(track.TrackPlane[VER]) 
       weak_writeout_bunch_distribution(&bunch, bunchModel, VER, bunchModel.nGen[VER]);
 
-    if(track.EnableRW_long)
+    if(track.EnableRW_long || ring.mode_feedback_size > 0)
     {
       int i, j;
       char filename_hist_dipole[FILENAME_MAX] = "";
@@ -422,13 +435,13 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       if(hist_dipole_fp == NULL)
         ERROR("fopen_stat_end", return);
       fprintf(hist_dipole_fp, " # history of dipole moments at rev = %i; Ib = %g A ;\n", rev, bunch.Ib);
-      fprintf(hist_dipole_fp, " # Nhist  kb   rev   dipole_HOR    dipole_VER\n");
-      for(j = 0; j < track.Nmlt; j++)
+      fprintf(hist_dipole_fp, " # Nhist  kb   rev   dipole_HOR    dipole_VER    dipole_LON \n");
+      for(j = 0; j < track.Nmlt+2; j++)
       {
         for(i = 0; i < ring.Nharm; i++)
         {
           double * mom = cyclic_array_get((j*ring.Nharm + i), &dipole_RW);
-          fprintf(hist_dipole_fp, " %d    %d    %d           %e    %e \n", j*ring.Nharm + i, i, j, mom[0], mom[1]);
+          fprintf(hist_dipole_fp, " %d    %d    %d           %e    %e    %e \n", j*ring.Nharm + i, i, j, mom[0], mom[1], mom[2]);
         }
         
       }
@@ -465,7 +478,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     fnp_ring = NULL;
   }
   
-  if(track.EnableRW_long > 0)
+  if(track.EnableRW_long > 0 || ring.mode_feedback_size>0)
     cyclic_array_destroy(&dipole_RW);
   
 }
