@@ -638,6 +638,9 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     if (!config_get_int(fp,section,"delay",&(mfb->diff_delay)))
       return false;
 
+    if (!config_get_int(fp,section,"averaging",&(mfb->averaging)))
+      return false;
+
     if (!config_get_double(fp,section,"gain",&(mfb->gain)))
       return false;
 
@@ -1707,7 +1710,8 @@ bool setup_ring_parameters(ring_t * ring)
     else rf_fb->phi0_design = 1*ring->phai0;
     //ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase-rf_fb->phi0_design));
     ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase+rf_fb->phi0_design));
-    ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
+    //ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
+    ring->phai0 = asin(vb/ring->Vrf0*sin(M_PI/2+rf_fb->phi0_design+genphase))+rf_fb->phi0_design;
     if (rf_fb->len_average==-1) ring->has_rf_feedback = 0;
     else if (fabs(rf_fb->len_average)>ring->Nbumax) ring->Nbumax = fabs(rf_fb->len_average);
   }
@@ -1795,8 +1799,8 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
     int i;
     for (i=0; i<ring->mode_feedback_size; i++) {
       mode_feedback_t * mfb = &(ring->mode_feedback[i]);
-      if (track->Nmlt < mfb->diff_delay) {
-	track->Nmlt = mfb->diff_delay;
+      if (track->Nmlt < mfb->diff_delay+mfb->averaging) {
+	track->Nmlt = mfb->diff_delay+mfb->averaging;
 	track->NmultiT = track->Nmlt+2;
       }
     }
