@@ -135,7 +135,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, LON))
       ERROR("fnp_ring_init", return);
     
-    unsigned int i;    
+    unsigned int i;
     for(i = 0; i < ring.Nharm; i++)
         if(ebeam.nfFill[i])
 	{
