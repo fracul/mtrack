@@ -344,7 +344,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if(!config_get_long_int(fp, section, "NrevPotentialsOut", &(track->NrevPotentialsOut)))
     track->NrevPotentialsOut = 0;
   if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->EnableRW_short_LON)))
-    track->EnableRW_short_LON = 1;
+    track->EnableRW_short_LON = track->EnableRW_short;
   if(!config_get_int(fp, section, "triggerRW", &(track->triggerRW)))
     track->triggerRW = 0;
   if(!config_get_int(fp, section, "Nmlt", &(track->Nmlt)) && track->EnableRW_long)
@@ -454,7 +454,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     
   
   /* Wall resistivity needed if RW enabled */
-  if(track->EnableRW_short == 1 || track->EnableRW_long == 1)
+  if(track->EnableRW_short == 1 || track->EnableRW_long == 1 || track->EnableRW_short_LON)
   {
     if(!config_get_double(fp, section, "rhorw", &(ring->rhorw)))
       return false;
@@ -462,14 +462,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       return false;
     if(!config_get_double(fp, section, "beffL2", &(ring->beffL[1])))
       return false;
-    if(track->TrackPlane[HOR])
+    if(track->EnableRW_short && track->TrackPlane[HOR])
     {
       if(!config_get_double(fp, section, "beffH3", &(ring->beffH[0])))
         return false;
       if(!config_get_double(fp, section, "beffH4", &(ring->beffH[1])))
         return false;
     }
-    if(track->TrackPlane[VER])
+    if(track->EnableRW_short && track->TrackPlane[VER])
     {
       if(!config_get_double(fp, section, "beffV3", &(ring->beffV[0])))
         return false;
@@ -788,7 +788,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   
   config_get_fprint = true;  
   int lr_res_tot = ring->longrange_resonators_size[LON]+ring->longrange_resonators_size[HOR]+ring->longrange_resonators_size[VER];
-  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0 || ring->wakefiles_size > 0)
+  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0 || ring->wakefiles_size > 0 || track->EnableRW_short_LON)
   {
     if(!config_have_section(fp, section))
       return false;
@@ -1740,7 +1740,7 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
     if(ring->beffH[1] > b && track->TrackPlane[1] == 1) b = ring->beffH[1];
     else if(ring->beffV[1] > b && track->TrackPlane[2] == 1) b = ring->beffV[1];
 
-    if (track->EnableRW_short)
+    if (track->EnableRW_short || track->EnableRW_short_LON)
     { // RW ala Bane
 
       track->s0 = pow((2 * b * b * ring->rhorw / Z_0), 1.0/3.0);

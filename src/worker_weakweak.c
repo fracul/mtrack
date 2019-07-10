@@ -90,7 +90,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     construct_greensfunc_file(&SelfFieldModel, &ring);
   
   /* Adding RW wake to SelfFieldModel */
-  if(track.EnableRW_short)
+  if(track.EnableRW_short || track.EnableRW_short_LON)
     construct_greensfunc_RW(&SelfFieldModel, &ring);
 
   if(bunch.kb_out == 1)

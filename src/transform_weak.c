@@ -506,6 +506,8 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
 
     SelfFieldModel->Gl[0] += *(RW0_val) * 4*Z_0*C_LIGHT / (pi*beffL2) * ring->Lc;    
     SelfFieldModel->PlaneL ++;
+    
+    if (!track.EnableRW_short) return 1;
    } /* end LON */
 
    if (track.TrackPlane[VER])
