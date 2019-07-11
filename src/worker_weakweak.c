@@ -40,7 +40,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   double * fnp_HOR; // # dipole moment in bins of last turn, for horizontal HOMs
   double * fnp_VER; // # dipole moment in bins of last turn, for vertical HOMs
   double scan_val = track.scan_start;
-  unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
+  unsigned int * branks = (unsigned int *) calloc(ring.Nharm, sizeof(int));
   unsigned int bnum=0;
   unsigned int i;
   bool fb_off = false;

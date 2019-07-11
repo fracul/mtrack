@@ -1568,7 +1568,7 @@ bool setup_ring_parameters(ring_t * ring)
   ring->Nharm   = ring->h;
   ring->T0     = ring->Nharm/ring->frf/FMEGA;
   ring->w0      = (2.0*M_PI) / ring->T0; /*SI*/
-  ring->Ibunch = (double *) malloc(ring->Nharm*sizeof(double));
+  ring->Ibunch = (double *) calloc(ring->Nharm, sizeof(double));
   ring->AmpDependdQH = (ring->CHH != 0.0) || (ring->CHV != 0.0);
   ring->AmpDependdQV = (ring->CVH != 0.0) || (ring->CVV != 0.0);
   
