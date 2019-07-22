@@ -526,6 +526,13 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if (!config_get_int(fp,section,"modeHT", &(macrop_model->modeHT)))
     macrop_model->mode_excitation=false;
   else macrop_model->mode_excitation=true;
+  if (!config_get_int(fp,section,"modeCB_LON", &(macrop_model->modeCB[LON])))
+    macrop_model->modeCB[LON] = 0;
+  else macrop_model->modeCB[LON] = -macrop_model->modeCB[LON];
+  if (!config_get_int(fp,section,"modeCB_HOR", &(macrop_model->modeCB[HOR])))
+    macrop_model->modeCB[HOR] = 0;
+  if (!config_get_int(fp,section,"modeCB_VER", &(macrop_model->modeCB[VER])))
+    macrop_model->modeCB[VER] = 0;
   config_get_fprint = true;
 
   if(!config_get_int(fp, section, "nGen_LON", &(macrop_model->nGen[LON]))

@@ -39,6 +39,7 @@ typedef struct bunch_macroparticle_model
   vector_t correlate;
 
   int modeHT;
+  int modeCB[3];
   bool mode_excitation;
   
   /* Offset and Sgm, with various units: [m] or [mm] or [nm] */

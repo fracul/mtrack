@@ -87,9 +87,10 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
                                const plane_t plane,
                                const bunch_macroparticle_model_t bunchModel)
 {
-  const double pos_offset = bunchModel.pos_offset.v[plane];
+  double cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[plane]*bunch->kb;
+  const double pos_offset = bunchModel.pos_offset.v[plane]*sin(cbphase);
   const double pos_sgm = bunchModel.pos_sgm.v[plane];
-  const double slope_offset = bunchModel.slope_offset.v[plane];
+  const double slope_offset = bunchModel.slope_offset.v[plane]*cos(cbphase);
   const double slope_sgm = bunchModel.slope_sgm.v[plane];
   const double correlate = bunchModel.correlate.v[plane];
   const int iseed = bunchModel.iseed[plane] + bunch->kb; /* (+ bunch->kb) to have different distr. for every bunch */
@@ -185,19 +186,22 @@ weak_generate_bunch_distribution(weak_bunch_t * bunch,
     
   else if(bunch->Np == 1)
   {
-    bunch->particles[0].pos.v[LON] = bunchModel.pos_offset.v[LON];
-    bunch->particles[0].slope.v[LON] = bunchModel.slope_offset.v[LON]; 
+    double cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[LON]*bunch->kb;
+    bunch->particles[0].pos.v[LON] = bunchModel.pos_offset.v[LON]*sin(cbphase);
+    bunch->particles[0].slope.v[LON] = bunchModel.slope_offset.v[LON]*cos(cbphase); 
     
      if(TrackPlane[HOR])
      {
-        bunch->particles[0].pos.v[HOR] = bunchModel.pos_offset.v[HOR];
-        bunch->particles[0].slope.v[HOR] = bunchModel.slope_offset.v[HOR]; 
+        cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[HOR]*bunch->kb;
+        bunch->particles[0].pos.v[HOR] = bunchModel.pos_offset.v[HOR]*sin(cbphase);
+        bunch->particles[0].slope.v[HOR] = bunchModel.slope_offset.v[HOR]*cos(cbphase); 
      }
      
     if(TrackPlane[VER])
      {
-         bunch->particles[0].pos.v[VER] = bunchModel.pos_offset.v[VER];
-         bunch->particles[0].slope.v[VER] = bunchModel.slope_offset.v[VER]; 
+        cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[VER]*bunch->kb;
+        bunch->particles[0].pos.v[VER] = bunchModel.pos_offset.v[VER]*sin(cbphase);
+        bunch->particles[0].slope.v[VER] = bunchModel.slope_offset.v[VER]*cos(cbphase); 
      }
     
     return 1;
