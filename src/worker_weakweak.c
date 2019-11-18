@@ -71,6 +71,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   int kb;
   MPI_Recv(&kb, 1, MPI_INT, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD, &status);
   
+  bunchModel.pos_offset.xtau += ebeam.tau_offset[branks[kb]-1];
   /* Create bunch, allocate memory */
   if(!weak_bunch_create(&bunch, &track, Np, bunch_I, kb, true))
     ERROR("weak_bunch_create", return);

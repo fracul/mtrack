@@ -88,7 +88,12 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
                                const bunch_macroparticle_model_t bunchModel)
 {
   double cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[plane]*bunch->kb;
-  const double pos_offset = bunchModel.pos_offset.v[plane]*sin(cbphase);
+  double pos_offset_tmp;
+  if (bunchModel.modeCB[plane]==0)
+    pos_offset_tmp = bunchModel.pos_offset.v[plane];
+  else
+    pos_offset_tmp = bunchModel.pos_offset.v[plane]*sin(cbphase);
+  const double pos_offset = pos_offset_tmp;
   const double pos_sgm = bunchModel.pos_sgm.v[plane];
   const double slope_offset = bunchModel.slope_offset.v[plane]*cos(cbphase);
   const double slope_sgm = bunchModel.slope_sgm.v[plane];
@@ -187,7 +192,10 @@ weak_generate_bunch_distribution(weak_bunch_t * bunch,
   else if(bunch->Np == 1)
   {
     double cbphase = 2*M_PI/ring.Nharm*bunchModel.modeCB[LON]*bunch->kb;
-    bunch->particles[0].pos.v[LON] = bunchModel.pos_offset.v[LON]*sin(cbphase);
+    if (bunchModel.modeCB[LON]==0)
+      bunch->particles[0].pos.v[LON] = bunchModel.pos_offset.v[LON];
+    else
+      bunch->particles[0].pos.v[LON] = bunchModel.pos_offset.v[LON]*sin(cbphase);
     bunch->particles[0].slope.v[LON] = bunchModel.slope_offset.v[LON]*cos(cbphase); 
     
      if(TrackPlane[HOR])
@@ -367,7 +375,7 @@ weak_bunch_writeout_tbtbbb(const long int NrevTot, const long int NrevMon,
     FILE * fp = fopen(filename,"w");
     if (fp!=NULL)
     {
-      fprintf(fp,"# turn    position of bunch 1,2,3...\n");
+      fprintf(fp,"# turn    scan_var    position of bunch 1,2,3...\n");
       long int rev;
       int m = 0;
       for (rev=NrevMon; rev<NrevTot+1; rev+=NrevMon)
