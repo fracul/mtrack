@@ -25,4 +25,5 @@ void fbt_calc_coeffs_Dimtel(fbt_feedback_t * fbt);
 
 void fbt_calc_coeffs_Spring8(fbt_feedback_t * fbt);
 
+void fbt_calc_coeffs_energy_sensing(fbt_feedback_t * fbt);
 #endif

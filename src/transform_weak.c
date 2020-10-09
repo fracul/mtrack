@@ -71,7 +71,7 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       
       if(track.EnableQuantum)
       {     
-        particle->slope.xtau = particle->slope.xtau * damp + excite * box_muller(iseed);
+	particle->slope.xtau = particle->slope.xtau * damp + excite * box_muller(iseed);
         rffocus[jp] = (1.0 + particle0[jp].slope.xtau)/(1.0 + particle0[jp].slope.xtau + xeps_gainj);
       }
       particle->pos.xtau = particle0[jp].pos.xtau - particle->slope.xtau * ring->T0*ring->ac;
@@ -961,7 +961,10 @@ transform_weak_bunch_fbt(fbt_feedback_t * fbt,weak_bunch_t * bunch,int rev) {
 
   if (fbt->plane==HOR) cyclic_array_set(rev,&(bunch->stats.pos.x),fbt->offset_history);
   else if (fbt->plane==VER) cyclic_array_set(rev,&(bunch->stats.pos.z),fbt->offset_history);
-  else if (fbt->plane==LON) cyclic_array_set(rev,&(bunch->stats.pos.xtau),fbt->offset_history);
+  else if (fbt->plane==LON) {
+    if (fbt->filt_type==3) cyclic_array_set(rev,&(bunch->stats.slope.xtau),fbt->offset_history);
+    else cyclic_array_set(rev,&(bunch->stats.pos.xtau),fbt->offset_history);
+  }
 
   if (rev>fbt->downsampling*(fbt->tap+1)) {
     for (jp = 0; jp<bunch->Np; jp++) {

@@ -14,6 +14,9 @@ fbt_init(fbt_feedback_t * fbt) {
   else if (fbt->filt_type==2) {
     fbt_calc_coeffs_Spring8(fbt);
   }
+  else if (fbt->filt_type==3) {
+    fbt_calc_coeffs_energy_sensing(fbt);
+  }
   else return false;
 
   return true;
@@ -57,13 +60,20 @@ fbt_calc_coeffs_Spring8(fbt_feedback_t * fbt){
   }
 }
 
+void 
+fbt_calc_coeffs_energy_sensing(fbt_feedback_t * fbt) {
+  int t;
+  for (t=0; t<fbt->tap; t++) fbt->coeffs_FIR[t] = cos(fbt->phase*M_PI/180.0);
+}
+
 double
 fbt_kick(fbt_feedback_t * fbt, int rev) {
   int t;
   double fbt_kick = 0;
   for (t=0;t<fbt->tap; t++) {
     //int index = rev-(fbt->tap-t-1)*fbt->downsampling;
-    int index = rev-t*fbt->downsampling;
+    //int index = rev-t*fbt->downsampling;
+    int index = (rev/fbt->downsampling)*fbt->downsampling-t*fbt->downsampling;
     fbt_kick += fbt->coeffs_FIR[t]*cyclic_array_get(index,fbt->offset_history)[0];
   }
   

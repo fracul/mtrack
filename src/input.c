@@ -520,6 +520,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   
   if (!config_get_double(fp,section,"modeCB_LON",&(macrop_model->modeCBf.v[LON])))
     macrop_model->modeCBf.v[LON] = 0.0;
+  else macrop_model->modeCBf.v[LON] = -macrop_model->modeCBf.v[LON];
   if (!config_get_double(fp,section,"modeCB_HOR",&(macrop_model->modeCBf.v[HOR])))
     macrop_model->modeCBf.v[HOR] = 0;
   if (!config_get_double(fp,section,"modeCB_VER",&(macrop_model->modeCBf.v[VER])))
