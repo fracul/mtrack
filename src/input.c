@@ -1682,7 +1682,8 @@ bool setup_ring_parameters(ring_t * ring)
     else rf_fb->phi0_design = 1*ring->phai0;
     //ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase-rf_fb->phi0_design));
     ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase+rf_fb->phi0_design));
-    ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
+    //ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
+    ring->phai0 = asin(vb/ring->Vrf0*sin(M_PI/2+rf_fb->phi0_design+genphase))+rf_fb->phi0_design;
     if (rf_fb->len_average==-1) ring->has_rf_feedback = 0;
     else if (fabs(rf_fb->len_average)>ring->Nbumax) ring->Nbumax = fabs(rf_fb->len_average);
   }

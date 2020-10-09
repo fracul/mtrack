@@ -308,16 +308,19 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       ERROR("fopen_stat_end", return);
     fprintf(bstats_end_fp, " # bunch statistics end of run, turns = %i; Ib = %g A ;\n", rev, bunches[0].Ib);
     fprintf(bstats_end_fp, " # bunch_num    CM    bunch_length    energy_dev    energy_spread;\n");
-    for(kb = 0; kb < ebeam.Nbunch; kb++)
+    for(kb = 0; kb < ring.Nharm; kb++)
     {
-      weak_bunch_t * bunch = &(bunches[kb]);
-      bunch_stats_t * bstats = &(bunch->stats);
-      MPI_Recv(&(bstats->pos), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->pos_sigma), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->slope), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->slope_sigma), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+      if (ebeam.nfFill[kb]) {
+	bnum = branks[kb];
+	weak_bunch_t * bunch = &(bunches[bnum-1]);
+	bunch_stats_t * bstats = &(bunch->stats);
+	MPI_Recv(&(bstats->pos), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->pos_sigma), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->slope), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->slope_sigma), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
       
-      fprintf(bstats_end_fp, " %d     %e    %e    %e    %e\n", kb, bstats->pos.xtau, bstats->pos_sigma.xtau, bstats->slope.xtau, bstats->slope_sigma.xtau);
+	fprintf(bstats_end_fp, " %d     %e    %e    %e    %e\n", kb, bstats->pos.xtau, bstats->pos_sigma.xtau, bstats->slope.xtau, bstats->slope_sigma.xtau);
+      }
     }
     fclose(bstats_end_fp);
   }
