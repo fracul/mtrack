@@ -364,7 +364,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       return false;
     if(track->current_ratio < 0. || track->current_ratio > 1.) 
     {
-      fprintf(stderr, "ERROR: current_ration not between 0 and 1.\n");
+      fprintf(stderr, "ERROR: current_ratio not between 0 and 1.\n");
       return false;
     }
   }
@@ -1434,7 +1434,7 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   for (kb=0; kb<ebeam->Nbunch; kb++) {
     if(track->EnableDiffCurr) {
       if (kb%2==0) ebeam->Ib_frac[kb] = track->current_ratio;
-      else ebeam->Ib_frac[kb] = 1.0 - track->current_ratio;
+      else ebeam->Ib_frac[kb] = 2.0 - track->current_ratio;
     }
     else ebeam->Ib_frac[kb] = 1.0;
   }
