@@ -1583,13 +1583,28 @@ bool setup_ring_parameters(ring_t * ring)
   unsigned Ntmp = 0;
   double mult =1.;
   double genphase = 0;
+  double vb = 0;
+  double genphase_harm = 0;
+  double eloss_harm = 0;
+  
   for(i = 1; i <= ring->longrange_resonators_size[LON]; i++)
   {
     LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
     if (lr_resonator->m>0) {
-      if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
-      else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
+      //if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+      //else genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
       lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
+      if (lr_resonator->m>1) {
+       //mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+       genphase_harm = cos(atan(lr_resonator->Qfactor*(lr_resonator->wr/(ring->wrf*lr_resonator->m)
+                                                       -(ring->wrf*lr_resonator->m)/lr_resonator->wr)));
+       eloss_harm += 2*ring->Iring*lr_resonator->Rs*genphase_harm*genphase_harm*FMILLI/FMEGA;
+      }
+      else {
+       genphase = atan(lr_resonator->Qfactor*(lr_resonator->wr/ring->wrf-ring->wrf/lr_resonator->wr));
+       vb = 2*ring->Iring*lr_resonator->Rs*cos(genphase)*FMILLI/FMEGA;
+       //eloss_harm += vb*cos(genphase);
+      }      
     }
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
@@ -1602,7 +1617,8 @@ bool setup_ring_parameters(ring_t * ring)
     if (lr_resonator->Nbu > Ntmp)
       Ntmp = lr_resonator->Nbu;
   }
-  ring->phai0 = asin(mult * ring->q) - genphase/2.0;
+  //ring->phai0 = asin(mult * ring->q) - genphase/2.0;
+  ring->phai0 = asin(ring->q+eloss_harm/ring->Vrf0);
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
 
