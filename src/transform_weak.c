@@ -102,7 +102,9 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     if(track.TrackPlane[VER])     
     {
       double PsiVj, cosVj, sinVj, amv11j, amv21j, amv12j, amv22j;
-      
+      double dQVj = 0.0;
+      double EVj, EHj;
+
       PsiV0   = 2.0*M_PI*ring->QV0;
 //       PsiV0   = 2.0*M_PI*ring->QV0/fNDlong;
 //       for(is=0; is<NDlong; is++)
@@ -111,7 +113,17 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
         {
           particle = &(bunch->particles[jp]);
       
-          PsiVj  = PsiV0 * (1.0 + ring->Gziz * particle0[jp].slope.xtau);
+	  if (ring->AmpDependdQV) {
+	    EVj = ring->gamma1[VER]*particle0[jp].pos.z*particle0[jp].pos.z
+	      +2*ring->alpha1[VER]*particle0[jp].pos.z*particle0[jp].slope.z
+	      +ring->beta1[VER]*particle0[jp].slope.z*particle0[jp].slope.z;
+	    EHj = ring->gamma1[VER]*particle0[jp].pos.x*particle0[jp].pos.x
+	      +2*ring->alpha1[VER]*particle0[jp].pos.x*particle0[jp].slope.x
+	      +ring->beta1[VER]*particle0[jp].slope.x*particle0[jp].slope.x;
+	    dQVj = ring->CVH*EHj+ring->CVV*EVj;
+	  }
+
+          PsiVj  = PsiV0 * (1.0 + ring->Gziz * particle0[jp].slope.xtau+dQVj);
           cosVj  = cos(PsiVj);
           sinVj  = sin(PsiVj);
           amv11j = cosVj + ring->alpha1[VER]*sinVj,   amv12j =         ring->beta1[VER]*sinVj;
@@ -133,6 +145,9 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
     if(track.TrackPlane[HOR])     
     { 
       double PsiHj, cosHj, sinHj, amh11j, amh12j, amh13j, amh21j, amh22j, amh23j;
+      double dQHj = 0;
+      double EVj, EHj;
+
       PsiH0   = 2.0*M_PI*ring->QH0; 
 //       PsiH0   = 2.0*M_PI*ring->QH0/fNDlong; 
 //       for(is=0; is<NDlong; is++)
@@ -141,8 +156,18 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
         for(jp = 0; jp < bunch->Np; jp++)
         {
           particle_t * particle = &(bunch->particles[jp]);
+
+	  if (ring->AmpDependdQV) {
+	    EVj = ring->gamma1[VER]*particle0[jp].pos.z*particle0[jp].pos.z
+	      +2*ring->alpha1[VER]*particle0[jp].pos.z*particle0[jp].slope.z
+	      +ring->beta1[VER]*particle0[jp].slope.z*particle0[jp].slope.z;
+	    EHj = ring->gamma1[VER]*particle0[jp].pos.x*particle0[jp].pos.x
+	      +2*ring->alpha1[VER]*particle0[jp].pos.x*particle0[jp].slope.x
+	      +ring->beta1[VER]*particle0[jp].slope.x*particle0[jp].slope.x;
+	    dQHj = ring->CHH*EHj+ring->CHV*EVj;
+	  }
        
-          PsiHj  = PsiH0 * (1.0 + ring->Gzix * particle0[jp].slope.xtau);
+          PsiHj  = PsiH0 * (1.0 + ring->Gzix * particle0[jp].slope.xtau + dQHj);
           cosHj  = cos(PsiHj);  
           sinHj = sin(PsiHj);          
           amh11j = cosHj + ring->alpha1[HOR]*sinHj;
@@ -378,7 +403,73 @@ construct_greensfunc_resonator(selffield_model_t * SelfFieldModel,
   return 1;
 } /* end fuction */
 
+int
+construct_greensfunc_file(selffield_model_t * SelfFieldModel,
+                          const ring_t * ring)
+{
+  const double dTau = SelfFieldModel->sigma_tau*SelfFieldModel->dT;
+  unsigned i,j,k;
 
+  for (j=0; j<ring->wakefiles_size; j++) {
+
+    FILE * wp = fopen(ring->wakefiles[j].filename,"r");
+    if (wp==NULL) {
+      fprintf(stderr,"ERROR: Cannot open file %s for reading.\n",ring->wakefiles[j].filename);
+      return false;
+    }
+
+    double Gtmp[SelfFieldModel->Ncell];
+    char str80[81];
+    double t, w;
+    do {
+      //c_strng(wp,str80,80);
+      if (fscanf(wp,"%lf%lf",&(t),&(w)) != 2)
+	break;
+    } while(t<0);
+
+    double last_t = 0;
+    double last_w = 0;
+    int last_i = -1;
+    bool eof = false;
+    Gtmp[0] = 0;
+    for (i=0; i<SelfFieldModel->Ncell; i++) {
+      if (eof) {
+	Gtmp[i] = Gtmp[i-1];
+      }
+      while (t<=i*dTau){
+        last_t = 1*t;
+        last_w = 1*w;
+        if (fscanf(wp,"%lf %lf\n",&(t),&(w))!=2) {
+	  eof = true;
+	  break;
+	}
+      }
+      while (t>(i+1)*dTau) i++;
+      for (k=last_i+1; k<i+1; k++)
+	Gtmp[k] = (w*(k*dTau-last_t)+last_w*(t-k*dTau))/(t-last_t);
+      if (i>last_i+1) {
+	i--;
+      }
+      last_i = 1*i;
+    }//end of loop through cells
+    switch(ring->wakefiles[j].plane) {
+    case LON:
+      Gtmp[0] = Gtmp[0]/2.;
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gl[i] += Gtmp[i];
+      SelfFieldModel->PlaneL++;
+      break;
+    case HOR:
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gh[i] += Gtmp[i];
+      SelfFieldModel->PlaneH++;
+      break;
+    case VER:
+      for (i=0; i<SelfFieldModel->Ncell; i++) SelfFieldModel->Gv[i] += Gtmp[i];
+      SelfFieldModel->PlaneV++;
+      break;
+    }
+  }//end of loop through files
+  return 1;
+}
 
 int
 construct_greensfunc_RW(selffield_model_t * SelfFieldModel, 
@@ -416,6 +507,8 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
 
     SelfFieldModel->Gl[0] += *(RW0_val) * 4*Z_0*C_LIGHT / (pi*beffL2) * ring->Lc;    
     SelfFieldModel->PlaneL ++;
+    
+    if (!track.EnableRW_short) return 1;
    } /* end LON */
 
    if (track.TrackPlane[VER])

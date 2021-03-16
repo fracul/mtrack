@@ -30,7 +30,8 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   int m = 0;
   double scan_val_hist[Nscan];
   double scan_val = track.scan_start;
-  unsigned int * branks = (unsigned int *) malloc(ring.Nharm * sizeof(int));
+  unsigned int * branks = (unsigned int *) calloc(ring.Nharm, sizeof(int));
+  unsigned int * bnumbers = (unsigned int *) calloc(ebeam.Nbunch, sizeof(int));
   
   printf("Starting job \"%s\"\n\n", track.jobtitle);  
   printf("Generating initial distribution...\n");
@@ -42,6 +43,17 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   
   /* Create bunches, allocate memory */
   weak_bunch_t * bunches = (weak_bunch_t *) malloc(ebeam.Nbunch * sizeof(weak_bunch_t));
+
+  unsigned int bnum = 0;
+  for(kb = 0; kb < ring.Nharm; kb++)
+  {
+    if (ebeam.nfFill[kb]) {
+      /* Send bucket number to each worker */
+      bnumbers[bnum] = kb;
+      bnum++;
+      branks[kb] = bnum;
+    }
+  }
   
   for(kb = 0; kb < ebeam.Nbunch; kb++)
   {
@@ -49,18 +61,21 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     unsigned int Np = bunchModel.Np; /* WARNING assuming equal number of particles */
     double bunch_Ib, fac;
     
-    if(track.EnableDiffCurr)
+    /*if(track.EnableDiffCurr)
     {
       if(kb%2 == 0) fac = track.current_ratio;
       else fac = 1.0 - track.current_ratio;      
       bunch_Ib = 2 * fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     }
     else
-      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); /* WARNING assuming equal curent in bunches */
+      bunch_Ib = ring.Iring/(((double) ebeam.Nbunch) * FKILO); // WARNING assuming equal curent in bunches 
+    */
       
+    fac = ebeam.Ib_frac[kb];
+    bunch_Ib = fac * ring.Iring/(((double) ebeam.Nbunch) * FKILO); 
     MPI_Send(&Np, 1, MPI_UNSIGNED, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
     MPI_Send(&bunch_Ib, 1, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
-    ring.Ibunch[kb] = bunch_Ib * FKILO;
+    ring.Ibunch[bnumbers[kb]] = bunch_Ib * FKILO;
     
     /* If FBII enabled, allocating particles in master */
     if(track.EnableFBII)
@@ -81,15 +96,10 @@ void manager_weakweak(ring_t ring, const tracking_t track,
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
   MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
   
-  unsigned int bnum = 0;
+  //unsigned int bnum = 0;
   for(kb = 0; kb < ebeam.Nbunch; kb++)
   {
-    if (ebeam.nfFill[kb]) {
-      /* Send bucket number to each worker */
-      bnum++;
-      branks[kb] = bnum;
-      MPI_Send(&kb, 1, MPI_INT, bnum, MBTRACK_TAG, MPI_COMM_WORLD);
-    }
+    MPI_Send(&(bnumbers[kb]), 1, MPI_INT, kb+1, MBTRACK_TAG, MPI_COMM_WORLD);
   }
   
   /* Recieve, calculate and output initial distribution statistics over all bunches */
@@ -298,16 +308,19 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       ERROR("fopen_stat_end", return);
     fprintf(bstats_end_fp, " # bunch statistics end of run, turns = %i; Ib = %g A ;\n", rev, bunches[0].Ib);
     fprintf(bstats_end_fp, " # bunch_num    CM    bunch_length    energy_dev    energy_spread;\n");
-    for(kb = 0; kb < ebeam.Nbunch; kb++)
+    for(kb = 0; kb < ring.Nharm; kb++)
     {
-      weak_bunch_t * bunch = &(bunches[kb]);
-      bunch_stats_t * bstats = &(bunch->stats);
-      MPI_Recv(&(bstats->pos), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->pos_sigma), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->slope), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
-      MPI_Recv(&(bstats->slope_sigma), 3, MPI_DOUBLE, kb+1, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+      if (ebeam.nfFill[kb]) {
+	bnum = branks[kb];
+	weak_bunch_t * bunch = &(bunches[bnum-1]);
+	bunch_stats_t * bstats = &(bunch->stats);
+	MPI_Recv(&(bstats->pos), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->pos_sigma), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->slope), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
+	MPI_Recv(&(bstats->slope_sigma), 3, MPI_DOUBLE, bnum, MBTRACK_TAG, MPI_COMM_WORLD, &status);
       
-      fprintf(bstats_end_fp, " %d     %e    %e    %e    %e\n", kb, bstats->pos.xtau, bstats->pos_sigma.xtau, bstats->slope.xtau, bstats->slope_sigma.xtau);
+	fprintf(bstats_end_fp, " %d     %e    %e    %e    %e\n", kb, bstats->pos.xtau, bstats->pos_sigma.xtau, bstats->slope.xtau, bstats->slope_sigma.xtau);
+      }
     }
     fclose(bstats_end_fp);
   }

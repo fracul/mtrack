@@ -91,6 +91,7 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
   const double pos_sgm = bunchModel.pos_sgm.v[plane];
   double slope_offset = bunchModel.slope_offset.v[plane];
   const double slope_sgm = bunchModel.slope_sgm.v[plane];
+  const double correlate = bunchModel.correlate.v[plane];
   const int iseed = bunchModel.iseed[plane] + bunch->kb; /* (+ bunch->kb) to have different distr. for every bunch */
 
   if (bunchModel.modeCBf.v[plane]!=0) {
@@ -122,8 +123,9 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
   for(jp = 0; jp < bunch->Np; jp++)
   {
     particle_t * particle = &(bunch->particles[jp]);
-    particle->pos.v[plane] = pos_offset + pos_sgm * c_fnorm(iseed);
-    particle->slope.v[plane] = slope_offset + slope_sgm * c_fnorm(iseed);
+    double tmp_pos = pos_sgm * c_fnorm(iseed);
+    particle->pos.v[plane] = pos_offset + tmp_pos;
+    particle->slope.v[plane] = slope_offset + slope_sgm * c_fnorm(iseed) + correlate * tmp_pos;
   }
 }
 
@@ -397,13 +399,10 @@ weak_bunch_writeout_tbtbbb(const long int NrevTot, const long int NrevMon,
 	long int irevmon = rev/NrevMon-1;
 	unsigned int ibunch;
 	fprintf(fp," %3ld %15.8e", rev, scan_val_hist[m]);
-	for (ibunch=0; ibunch<ring.Nharm; ibunch++) {
-	  if (ebeam.nfFill[ibunch])
-	    {
-	      	if (plane==HOR) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].x);
-	      	if (plane==VER) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].z);
-	      	if (plane==LON) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].xtau);
-	    }
+	for (ibunch=0; ibunch<ebeam.Nbunch; ibunch++) {
+	  if (plane==HOR) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].x);
+	  if (plane==VER) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].z);
+	  if (plane==LON) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].xtau);
 	}
 	fprintf(fp,"\n");
       }

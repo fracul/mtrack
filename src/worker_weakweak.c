@@ -41,10 +41,11 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   double * fnp_HOR; // # dipole moment in bins of last turn, for horizontal HOMs
   double * fnp_VER; // # dipole moment in bins of last turn, for vertical HOMs
   double scan_val = track.scan_start;
-  unsigned int * branks = (unsigned int *) malloc(ring.Nharm*sizeof(int));
+  unsigned int * branks = (unsigned int *) calloc(ring.Nharm, sizeof(int));
   unsigned int bnum=0;
   unsigned int i;
-  double phi0_design, vrf_design;
+  bool fb_off = false;
+
   for (i=0; i<ring.Nharm; i++)
       if (ebeam.nfFill[i])
       {
@@ -65,6 +66,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   
   MPI_Bcast((void *) &(ebeam.Nbunch), 1, MPI_INT, MANAGER_RANK, MPI_COMM_WORLD);
   MPI_Bcast(ring.Ibunch, ring.Nharm, MPI_DOUBLE, MANAGER_RANK, MPI_COMM_WORLD);
+
   
   /* Recieve bunch number from manager */
   int kb;
@@ -79,13 +81,17 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   /* Initialize selffield model, and allocate memory */
   if(!selffield_model_init(&SelfFieldModel, bunchModel.pos_sgm.xtau, &bunch))
     ERROR("selffield_model_init", return);
+
   /* Construct Greensfunctions for all given resonators */
-  
   if(ring.resonators_size > 0)
     construct_greensfunc_resonator(&SelfFieldModel, &ring);
+
+  /* Add Green's functions from files */
+  if(ring.wakefiles_size > 0)
+    construct_greensfunc_file(&SelfFieldModel, &ring);
   
   /* Adding RW wake to SelfFieldModel */
-  if(track.EnableRW_short)
+  if(track.EnableRW_short || track.EnableRW_short_LON)
     construct_greensfunc_RW(&SelfFieldModel, &ring);
 
   if(bunch.kb_out == 1)
@@ -116,8 +122,15 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   int Nbin = SelfFieldModel.Ncell;
   if(ring.longrange_resonators_size[LON] > 0)
   {
-    if (ring.has_rf_feedback)
+
+    if (ring.has_rf_feedback) {
+
+      if (ring.rf_feedback->len_average<0) {
+	ring.rf_feedback->len_average = -1*ring.rf_feedback->len_average;
+	fb_off = true;
+      }
       rffb_init(ring.rf_feedback);
+    }
   
     int Nbin = SelfFieldModel.Ncell;
     fnp_ring = (double *) calloc((int)Nbin * ring.Nharm, sizeof(double));
@@ -125,7 +138,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     if(!fnp_ring_update(&ring, fnp_ring, &SelfFieldModel, &bunch, kb, LON))
       ERROR("fnp_ring_init", return);
     
-    unsigned int i;    
+    unsigned int i;
     for(i = 0; i < ring.Nharm; i++)
         if(ebeam.nfFill[i])
 	{
@@ -140,12 +153,15 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       double vmbar, phibar;
       rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
       vmbar = vmbar*ring.E0*FKILO;
-      phi0_design = 1*ring.phai0;
-      vrf_design = 1*ring.Vrf0;
-      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
-      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
-      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
+
+      //ring.rf_feedback->phi0_design = 1*ring.phai0;
+      //ring.rf_feedback->vrf_design = 1*ring.Vrf0;
+      double tmp_numrtor = ring.rf_feedback->vrf_design*sin(ring.rf_feedback->phi0_design)-vmbar*sin(phibar);
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+
+      ring.phai0 = atan2(tmp_numrtor,ring.rf_feedback->vrf_design*cos(ring.rf_feedback->phi0_design)-vmbar*cos(phibar));
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
+      if (fb_off) ring.has_rf_feedback = 0;
     }
   }
   if(track.TrackPlane[HOR] && ring.longrange_resonators_size[HOR] > 0)
@@ -259,9 +275,11 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
       double vmbar, phibar;
       rffb_calc_mean_voltage_phase(ring.rf_feedback,&vmbar,&phibar);
       vmbar = vmbar*ring.E0*FKILO;
-      double tmp_numrtor = vrf_design*sin(phi0_design)-vmbar*sin(phibar);
-      ring.phai0 = atan2(tmp_numrtor,vrf_design*cos(phi0_design)-vmbar*cos(phibar));
-      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,vrf_design*ring.wrf*cos(phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+      double tmp_numrtor = ring.rf_feedback->vrf_design*sin(ring.rf_feedback->phi0_design)-vmbar*sin(phibar);
+      ring.phai0 = atan2(tmp_numrtor,ring.rf_feedback->vrf_design*cos(ring.rf_feedback->phi0_design)-vmbar*cos(phibar));
+
+      //ring.phai0 = atan2(tmp_numrtor*ring.wrf,ring.rf_feedback->vrf_design*ring.wrf*cos(ring.rf_feedback->phi0_design)-vmbar*ring.longrange_resonators[0].wr*cos(phibar));
+
       ring.Vrf0 = tmp_numrtor/sin(ring.phai0);
     }
     
@@ -431,7 +449,7 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
     printf("\n WARNING - Binning for selffields bunch #%d:\n %d particles below first bin,    %d particles above last bin\n", kb, bunch.N_trash_low, bunch.N_trash_high);
   }
 
-  if (bunch.kb_out==1 && ring.has_rf_feedback){
+  if(bunch.kb_out==1 && ring.has_rf_feedback) {
     printf("\nFinal RF voltage and phase: %.7f MV, %.5f\n",ring.Vrf0,ring.phai0);
   }
   

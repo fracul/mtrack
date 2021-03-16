@@ -36,6 +36,7 @@ typedef struct bunch_macroparticle_model
   /* Sgm [m] */
   vector_t pos_sgm;
   vector_t slope_sgm;
+  vector_t correlate;
 
   int modeHT;
   bool mode_excitation;
@@ -44,9 +45,9 @@ typedef struct bunch_macroparticle_model
   
   /* Offset and Sgm, with various units: [m] or [mm] or [nm] */
   /* Set by read-in, if negative: calculated by macrop_model_setup_parameters */
-  double xtauCM_offset, xepsCM_offset, sgm_xtau,    sgm_xeps;
-  double xxCM_offset,   xpCM_offset,   sgm_xx,      sgm_xp;
-  double zzCM_offset,   zpCM_offset,   sgm_zz,      sgm_zp;
+  double xtauCM_offset, xepsCM_offset, sgm_xtau,    sgm_xeps, corr_epstau;
+  double xxCM_offset,   xpCM_offset,   sgm_xx,      sgm_xp,  corr_xpx;
+  double zzCM_offset,   zpCM_offset,   sgm_zz,      sgm_zp,  corr_zpz;
 }
 bunch_macroparticle_model_t;
 
@@ -84,6 +85,7 @@ bunch_weak_distribution_t;
 typedef struct e_beam
 {
   int *  nfFill; /**< Filling by bucket. 0: empty,  1: filled  */
+  double * Ib_frac;
   int    Nbunch; /**< Total number of filled bunches in the ring */
   
   bunch_strong_distribution_t distrib;

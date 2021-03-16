@@ -5,6 +5,8 @@
 
 typedef struct rffeedback
 {
+  double vrf_design;
+  double phi0_design;
   int lr_resonator;
   int len_average;
   int count;

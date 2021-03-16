@@ -24,6 +24,13 @@ typedef struct resonator
 }
 resonator_t;
 
+typedef struct wakefile
+{
+  char filename[FILENAME_MAX];
+  plane_t plane;
+}
+wakefile_t;
+
 typedef
 struct LR_resonator
 {
@@ -93,6 +100,9 @@ typedef struct ring
   double HC_k;
   
   double QH0, QV0, Qso; /**< Tunes, H: hor., V: vert., s: sync. */
+  double CHH, CHV, CVH, CVV;
+  bool AmpDependdQV;
+  bool AmpDependdQH;
   double wgziH, wgziV; /**< [Hz] */
   double beta1[3], alpha1[3], gamma1[3];
   double dispH1,   disppH1;
@@ -101,6 +111,9 @@ typedef struct ring
    
   resonator_t * resonators; /**< List of resonators used for selffields */
   unsigned resonators_size; /**< Number of shortrange resonators for selffield */
+
+  wakefile_t * wakefiles;
+  unsigned wakefiles_size;
   
   LR_resonator_t * longrange_resonators[3];  /**< Longrange resonator, acts over several turns */
   unsigned longrange_resonators_size[3]; /** number of lr resonators */
@@ -163,6 +176,7 @@ typedef struct tracking
   char jobtitle[80]; /**< Job title */
   char input_filename[FILENAME_MAX]; /**< Path to the input file */
   char work_path[FILENAME_MAX]; /**< Path of the working directory, where output will be writen */
+  char fill_filename[FILENAME_MAX];
   
   int scan; /**< Flag for scan options; 0: no scan, 1: (ring)current scan, 2: chroma scan, 3: Q of HC */
   long int Nscan; /**< Number of scan steps */
