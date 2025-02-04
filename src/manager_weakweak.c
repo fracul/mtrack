@@ -158,15 +158,15 @@ void manager_weakweak(ring_t ring, const tracking_t track,
       }
   }
   
-  if(track.EnableRW_long > 0)
+  if(track.EnableRW_long > 0 || ring.mode_feedback_size>0)
   {
     unsigned int i;
-    double trash[2];
+    double trash[3];
     for(i = 0; i < ring.Nharm; i++)
       if(ebeam.nfFill[i])
       {
         /* Broadcast from workers to workers, manager does not nead the info -> trash */
-        MPI_Bcast(trash, 2, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+        MPI_Bcast(trash, 3, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
       }
   }
   
@@ -207,15 +207,15 @@ void manager_weakweak(ring_t ring, const tracking_t track,
     /* TODO writeout_rms_Vbeamsize */
     
     
-    if(track.EnableRW_long > 0)
+    if(track.EnableRW_long > 0 || ring.mode_feedback_size>0)
     {
       unsigned int i;
-      double trash[2];
+      double trash[3];
       for(i = 0; i < ring.Nharm; i++)
         if(ebeam.nfFill[i])
         {
           /* Broadcast from workers to workers, manager does not nead the info -> trash */
-          MPI_Bcast(trash, 2, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
+          MPI_Bcast(trash, 3, MPI_DOUBLE, branks[i], MPI_COMM_WORLD);
         }
     }    
     

@@ -54,6 +54,16 @@ typedef struct active_HC
 }
 active_HC_t;
 
+typedef struct mode_feedback
+{
+  int mode;
+  double gain;
+  int diff_delay;
+  double output_phase;
+  int averaging;
+}
+mode_feedback_t;
+
 /**
  * \brief Ring and machine parameters
  */
@@ -122,6 +132,9 @@ typedef struct ring
   resonators */
   rf_feedback_t * rf_feedback;
   int has_rf_feedback;
+
+  mode_feedback_t * mode_feedback;
+  int mode_feedback_size;
   
   active_HC_t * active_HC;
   unsigned active_HC_size;

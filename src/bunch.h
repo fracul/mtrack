@@ -424,4 +424,7 @@ double box_muller(const int iseed);
  */
 void fprintf_matrix(FILE * fp, const unsigned lines, const unsigned columns, int matrix[][50]);
 
+//void
+//modefb_get_phidiff(mode_feedback_t * modefb, cyclic_array_t * all_moments, const int bpos, ring_t * ring, e_beam_t * ebeam, double * phase);
+
 #endif /* MBTRACK_BUNCH_H */

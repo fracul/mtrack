@@ -623,6 +623,34 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     snprintf(section, 32, "wake_file_%d", i);
   }
   ring->wakefiles_size = i-1;
+
+  i = 1;
+  ring->mode_feedback = (mode_feedback_t *) malloc(i*sizeof(mode_feedback_t));
+  snprintf(section, 32, "mode_feedback_%d", i);
+  while(config_have_section(fp,section))
+  {
+    ring->mode_feedback = (mode_feedback_t *) realloc(ring->wakefiles,i*sizeof(mode_feedback_t));
+    mode_feedback_t * mfb = &(ring->mode_feedback[i-1]);
+
+    if (!config_get_int(fp,section,"mode",&(mfb->mode)))
+      return false;
+
+    if (!config_get_int(fp,section,"delay",&(mfb->diff_delay)))
+      return false;
+
+    if (!config_get_int(fp,section,"averaging",&(mfb->averaging)))
+      return false;
+
+    if (!config_get_double(fp,section,"gain",&(mfb->gain)))
+      return false;
+
+    if (!config_get_double(fp,section,"phase",&(mfb->output_phase)))
+      return false;
+
+    i++;
+    snprintf(section, 32, "mode_feedback_%d", i);
+  }
+  ring->mode_feedback_size = i-1;
   
   /*
    * [harmonic_cavity_1], [harmonic_cavity_2], ...
@@ -1766,6 +1794,15 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
           fprintf(stderr, "Given RW is to shortrange, RW_long will be switched off!\n");
           track->EnableRW_long = 0;
         }
+    }
+
+    int i;
+    for (i=0; i<ring->mode_feedback_size; i++) {
+      mode_feedback_t * mfb = &(ring->mode_feedback[i]);
+      if (track->Nmlt < mfb->diff_delay+mfb->averaging) {
+	track->Nmlt = mfb->diff_delay+mfb->averaging;
+	track->NmultiT = track->Nmlt+2;
+      }
     }
   
   return true;
