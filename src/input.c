@@ -526,6 +526,13 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if (!config_get_int(fp,section,"modeHT", &(macrop_model->modeHT)))
     macrop_model->mode_excitation=false;
   else macrop_model->mode_excitation=true;
+  if (!config_get_int(fp,section,"modeCB_LON", &(macrop_model->modeCB[LON])))
+    macrop_model->modeCB[LON] = 0;
+  else macrop_model->modeCB[LON] = -macrop_model->modeCB[LON];
+  if (!config_get_int(fp,section,"modeCB_HOR", &(macrop_model->modeCB[HOR])))
+    macrop_model->modeCB[HOR] = 0;
+  if (!config_get_int(fp,section,"modeCB_VER", &(macrop_model->modeCB[VER])))
+    macrop_model->modeCB[VER] = 0;
   config_get_fprint = true;
 
   if(!config_get_int(fp, section, "nGen_LON", &(macrop_model->nGen[LON]))
@@ -1431,6 +1438,7 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
     if(ebeam->nfFill[kb]) (ebeam->Nbunch)++;
   }
   ebeam->Ib_frac = (double *) malloc(ebeam->Nbunch*sizeof(double));
+  ebeam->tau_offset = (double *) calloc(ebeam->Nbunch,sizeof(double));
   for (kb=0; kb<ebeam->Nbunch; kb++) {
     if(track->EnableDiffCurr) {
       if (kb%2==0) ebeam->Ib_frac[kb] = track->current_ratio;
@@ -1451,20 +1459,31 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
 
   unsigned int kb, jb;
   int nb_tmp, bout_tmp;
-  double crat_tmp;
+  double crat_tmp, tauoff_tmp;
+  int args_matched;
   int * bucket_out = (int *) malloc(Nharm*sizeof(int));
   double * bucket_ratio = (double *) malloc(Nharm*sizeof(double));
+  double * tau_offset = (double *) malloc(Nharm*sizeof(double));
   double crat_tot = 0.0;
   int Nbout = 0;
   int Nbunch = 0;
+  char input_str[100];
+  char * test_str;
+
   for (kb = 0; kb<Nharm; kb++) {
-    if (fscanf(efp,"%d %lf %d\n",&nb_tmp,&crat_tmp,&bout_tmp)!=3)
+    test_str = fgets(input_str,100,efp);
+    if (test_str==NULL)
+      break;
+    args_matched = sscanf(input_str,"%d %lf %d %lf",&nb_tmp,&crat_tmp,&bout_tmp,&tauoff_tmp);
+    //args_matched = fscanf(efp,"%d %lf %d ",&nb_tmp,&crat_tmp,&bout_tmp);
+    if (args_matched<3)
       break;
     if (nb_tmp>=Nharm)
       break;
     while (nb_tmp>kb) {
       bucket_out[kb] = 0;
       bucket_ratio[kb] = 0;
+      tau_offset[kb] = 0;
       kb++;
     }
     if (crat_tmp>0) {
@@ -1482,12 +1501,18 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
       bucket_out[kb] = 0;
       bucket_ratio[kb] = 0.0;
     }
+    if (args_matched>3) 
+      tau_offset[kb] = tauoff_tmp;
+    else
+      tau_offset[kb] = 0.0;
+    args_matched = 0;
   }
   fclose(efp);
 
   for (jb=kb; jb<Nharm; jb++) {
     bucket_out[jb] = 0;
     bucket_ratio[jb] = 0;
+    tau_offset[kb] = 0;
   }
 
   double crat_mean = crat_tot/Nbunch;
@@ -1495,12 +1520,14 @@ bool e_beam_fileread(tracking_t * track, e_beam_t * ebeam, int Nharm) {
   track->bunch_out = (int *) malloc(track->Nbunch_out*sizeof(int)); 
   ebeam->Nbunch = 1*Nbunch;
   ebeam->Ib_frac = (double *) malloc(ebeam->Nbunch*sizeof(double));
+  ebeam->tau_offset = (double *) malloc(ebeam->Nbunch*sizeof(double));
   Nbout = 0;
   Nbunch = 0;
 
   for (kb = 0; kb<Nharm; kb++) {
     if (bucket_ratio[kb]>0) {
       ebeam->Ib_frac[Nbunch] = bucket_ratio[kb]/crat_mean;
+      ebeam->tau_offset[Nbunch] = tau_offset[kb]*FNANO;
       Nbunch++;
       if (bucket_out[kb]) {
 	track->bunch_out[Nbout] = kb;

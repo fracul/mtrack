@@ -39,6 +39,7 @@ typedef struct bunch_macroparticle_model
   vector_t correlate;
 
   int modeHT;
+  int modeCB[3];
   bool mode_excitation;
   
   /* Offset and Sgm, with various units: [m] or [mm] or [nm] */
@@ -82,8 +83,9 @@ bunch_weak_distribution_t;
  */
 typedef struct e_beam
 {
-  int *  nfFill; /**< Filling by bucket. 0: empty,  1: filled  */
+  int * nfFill; /**< Filling by bucket. 0: empty,  1: filled  */
   double * Ib_frac;
+  double * tau_offset;
   int    Nbunch; /**< Total number of filled bunches in the ring */
   
   bunch_strong_distribution_t distrib;

@@ -11,7 +11,7 @@
 #include "tune.h"
 #include "tracking.h"
 #include "feedback_rf.h"
-
+#include "def.h"
 
 /* Global variables */
 extern grid_t fbii_grid;
@@ -71,6 +71,26 @@ void worker_weakweak(ring_t ring, const tracking_t track, e_beam_t ebeam,
   int kb;
   MPI_Recv(&kb, 1, MPI_INT, MANAGER_RANK, MBTRACK_TAG, MPI_COMM_WORLD, &status);
   
+  if (track.filling == fromfile && !bunchModel.nGen[LON]) {
+    int ch = '/';
+    const char * chpoint = bunchModel.gendst_datafile[LON];
+    char * fname_tmp = strrchr(chpoint,ch);
+    char * fnamestart;
+    if (fname_tmp!=NULL)
+      fnamestart = fname_tmp+1;
+    else
+      fnamestart = chpoint;
+    //if (fname_tmp==NULL)
+    //  fprintf(stderr,"\n%s not found in %s\n",ch,bunchModel.gendst_datafile[LON]);
+    //while (fname_tmp != NULL) {
+    //  fnamestart = fname_tmp+1;
+    //  fname_tmp = strchr(fname_tmp+1,ch);
+    //}
+    int fname_left = FILENAME_MAX-strlen(fnamestart);
+    snprintf(fnamestart,fname_left,"longdist%d",kb);
+  }
+  bunchModel.pos_offset.xtau += ebeam.tau_offset[branks[kb]-1];
+
   /* Create bunch, allocate memory */
   if(!weak_bunch_create(&bunch, &track, Np, bunch_I, kb, true))
     ERROR("weak_bunch_create", return);
