@@ -18,7 +18,7 @@ CC=gcc
 MPICC=mpicc -DDEBUG_INPUT
 LIBS=-lm
 
-WEAKWEAK_OBJECTS=manager_weakweak.o worker_weakweak.o bunch_weak.o transform_weak.o cyclic_array.o feedback_rf.o
+WEAKWEAK_OBJECTS=manager_weakweak.o worker_weakweak.o bunch_weak.o transform_weak.o cyclic_array.o feedback_rf.o feedback_fbt.o coeffs_Sp8.o nrutil.o
 WEAKSTRONG_OBJECTS=manager_weakstrong.o worker_weakstrong.o bunch_strong.o fbi_weakstrong.o rw_weakstrong.o
 
 all : ../mbtrack-mpi

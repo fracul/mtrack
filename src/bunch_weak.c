@@ -87,12 +87,37 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
                                const plane_t plane,
                                const bunch_macroparticle_model_t bunchModel)
 {
-  const double pos_offset = bunchModel.pos_offset.v[plane];
+  double pos_offset = bunchModel.pos_offset.v[plane];
   const double pos_sgm = bunchModel.pos_sgm.v[plane];
-  const double slope_offset = bunchModel.slope_offset.v[plane];
+  double slope_offset = bunchModel.slope_offset.v[plane];
   const double slope_sgm = bunchModel.slope_sgm.v[plane];
   const double correlate = bunchModel.correlate.v[plane];
   const int iseed = bunchModel.iseed[plane] + bunch->kb; /* (+ bunch->kb) to have different distr. for every bunch */
+
+  if (bunchModel.modeCBf.v[plane]!=0) {
+    double phi_cb = bunchModel.modeCBf.v[plane]/ring.Nharm*bunch->kb*2*M_PI;
+    double cosB, sinB;
+    cosB   = cos(phi_cb);
+    sinB   = sin(phi_cb);
+
+    if ((plane==HOR) || (plane==VER)) {
+      double argA, cosA, sinA;
+      double tmp_pos;
+      //if (plane==HOR) argA   = ring.wgziH * particle->pos.xtau;
+      //else argA = ring.wgziV * particle->pos.xtau;
+      argA = 0;
+      cosA   = cos(argA);
+      sinA   = sin(argA);
+      tmp_pos = pos_offset*(cosA*cosB + sinA*sinB)/FKILO;
+      slope_offset += (-pos_offset/ring.beta1[plane]*(sinA*cosB - cosA*sinB) 
+		       + pos_offset*ring.alpha1[plane]/ring.beta1[plane]*(cosA*cosB + sinA*sinB))/FKILO;
+      pos_offset = 1*tmp_pos;
+    }
+    else {
+      pos_offset = pos_offset*cosB;
+      slope_offset += pos_offset*ring.wso/ring.ac*sinB;
+    }
+  }
 
   unsigned jp;
   for(jp = 0; jp < bunch->Np; jp++)
@@ -107,6 +132,7 @@ weak_bunch_normal_distribution(weak_bunch_t * bunch,
 
 static void
 weak_bunch_excitation_distribution(weak_bunch_t * bunch,
+				   const plane_t plane,
                                    const bunch_macroparticle_model_t bunchModel)
 {
   const double fmodeHT = (double) bunchModel.modeHT; 
@@ -120,16 +146,17 @@ weak_bunch_excitation_distribution(weak_bunch_t * bunch,
   double xtauCM_offset = bunch->stats.pos.v[LON];
   double xtaupCM_offset = bunch->stats.slope.v[LON];
   
-  const double zzCM_offset = bunchModel.zzCM_offset;
-  const double sgm_zz = bunchModel.sgm_zz;
-  const double zpCM_offset = bunchModel.zpCM_offset;
+  const double zzCM_offset = bunchModel.pos_offset.v[plane];//bunchModel.zzCM_offset;
+  const double sgm_zz = bunchModel.pos_sgm.v[plane];
+  const double zpCM_offset = bunchModel.slope_offset.v[plane];
 
-  int iseed = bunchModel.iseed[VER];
+  int iseed = bunchModel.iseed[plane]+bunch->kb;
   if (iseed!=iseed0) {
      srand(iseed);
      iseed0 = iseed;
   }
-  double phi_beta = 0*((double) rand())/((double) RAND_MAX)*2*M_PI;
+  //double phi_beta = 0*((double) rand())/((double) RAND_MAX)*2*M_PI;
+  double phi_beta = bunchModel.modeCBf.v[plane]*bunch->kb*2*M_PI;
   
   unsigned jp;
   double norm_fac;
@@ -155,15 +182,16 @@ weak_bunch_excitation_distribution(weak_bunch_t * bunch,
     psi0k  = atan(norm_fac*slopextau/(particle->pos.xtau-xtauCM_offset));
     if(psi0k < 0.0  && slopextau > 0.0) psi0k = psi0k + M_PI;
     if(psi0k > 0.0  && slopextau < 0.0) psi0k = psi0k + M_PI;
-    argA   = 0 * ring.wgziV * particle->pos.xtau;
+    if (plane==HOR) argA   = ring.wgziH * particle->pos.xtau;
+    else argA = ring.wgziV * particle->pos.xtau;
     argB   = fmodeHT*psi0k+phi_beta;
     cosA   = cos(argA);
     sinA   = sin(argA);
     cosB   = cos(argB);
     sinB   = sin(argB);
-    particle->pos.z = (zzCM_offset + sqrt(2)*sgm_zz*(cosA*cosB + sinA*sinB))/FKILO;
-    particle->slope.z = (zpCM_offset - sqrt(2)*sgm_zz/ring.beta1[VER]*(sinA*cosB - cosA*sinB) 
-			 + sqrt(2)*sgm_zz*ring.alpha1[VER]/ring.beta1[VER]*(cosA*cosB + sinA*sinB))/FKILO;
+    particle->pos.v[plane] = (zzCM_offset + sqrt(2)*sgm_zz*(cosA*cosB + sinA*sinB))/FKILO;
+    particle->slope.v[plane] = (zpCM_offset - sqrt(2)*sgm_zz/ring.beta1[plane]*(sinA*cosB - cosA*sinB) 
+				+ sqrt(2)*sgm_zz*ring.alpha1[plane]/ring.beta1[plane]*(cosA*cosB + sinA*sinB))/FKILO;
 
     /*fprintf(fp, "%10d  %10.5lf  %10.5lf", jp,zz0[0][jp]*FKILO, zp0[0][jp]*FKILO);*/
   }
@@ -261,7 +289,7 @@ weak_generate_bunch_distribution(weak_bunch_t * bunch,
       if(bunchModel.nGen[VER])
       {
         if(bunchModel.mode_excitation)
-          weak_bunch_excitation_distribution(bunch, bunchModel);
+          weak_bunch_excitation_distribution(bunch, VER, bunchModel);
         else
           weak_bunch_normal_distribution(bunch, VER, bunchModel);
       }

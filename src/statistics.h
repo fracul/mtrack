@@ -9,16 +9,16 @@
 #include <stdio.h>
 #include "bunch.h"
 
-inline vector_t
+vector_t
 vector_new(const double xtau, const double x, const double z);
 
-inline vector_t
+vector_t
 vector_add(const vector_t a, const vector_t b);
 
-inline vector_t
+vector_t
 vector_mul_scalar(const vector_t a, const double k);
 
-inline vector_t
+vector_t
 vector_square(const vector_t a);
 
 /**

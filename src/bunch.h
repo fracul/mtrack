@@ -40,6 +40,8 @@ typedef struct bunch_macroparticle_model
 
   int modeHT;
   bool mode_excitation;
+
+  vector_t modeCBf;
   
   /* Offset and Sgm, with various units: [m] or [mm] or [nm] */
   /* Set by read-in, if negative: calculated by macrop_model_setup_parameters */

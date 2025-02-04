@@ -526,6 +526,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if (!config_get_int(fp,section,"modeHT", &(macrop_model->modeHT)))
     macrop_model->mode_excitation=false;
   else macrop_model->mode_excitation=true;
+  
+  if (!config_get_double(fp,section,"modeCB_LON",&(macrop_model->modeCBf.v[LON])))
+    macrop_model->modeCBf.v[LON] = 0.0;
+  else macrop_model->modeCBf.v[LON] = -macrop_model->modeCBf.v[LON];
+  if (!config_get_double(fp,section,"modeCB_HOR",&(macrop_model->modeCBf.v[HOR])))
+    macrop_model->modeCBf.v[HOR] = 0;
+  if (!config_get_double(fp,section,"modeCB_VER",&(macrop_model->modeCBf.v[VER])))
+    macrop_model->modeCBf.v[VER] =0;
   config_get_fprint = true;
 
   if(!config_get_int(fp, section, "nGen_LON", &(macrop_model->nGen[LON]))
@@ -567,44 +575,6 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
      | !config_get_double(fp, section, "sgm_zp", &(macrop_model->sgm_zp)))
     return false;
   
-  /*
-   * [resonator_1], [resonator_2], ...
-   */
-  ring->resonators = (resonator_t *) malloc(1 * sizeof(resonator_t));
-  config_get_fprint = true;
-  
-  /* first resonator */
-  i = 1;
-  snprintf(section, 32, "resonator_%d", i);
-  while(config_have_section(fp, section) && enable_resonators!=0)
-  {    
-    ring->resonators = (resonator_t *) realloc(ring->resonators, i * sizeof(resonator_t));
-    resonator_t * resonator = &(ring->resonators[i-1]);
-    
-    if(!config_get_double(fp, section, "Rs", &(resonator->Rs)))
-      return false;
-    
-    if(!config_get_double(fp, section, "fres", &tmp))
-      return false;
-    resonator->wr = (tmp*FGIGA)*2.0*M_PI; /* [GHz] -> [Hz] */
-    
-    if(!config_get_double(fp, section, "Qfactor", &(resonator->Qfactor)))
-      return false;
-    
-    if(resonator->Qfactor == 0.5)
-    fprintf(stderr, "WARNING: resonator %d has Qfactor = 0.5 and will be ignored! \n", i);
-    
-    if(!config_get_str(fp, section, "plane", plane_str)
-       || !scan_plane(plane_str, &(resonator->plane)) )
-      return false;
-
-    
-    /* next resonator */
-    i++;
-    snprintf(section, 32, "resonator_%d", i);
-  }
-  ring->resonators_size = i-1;
-
   i = 1;
   ring->wakefiles = (wakefile_t *) malloc(i*sizeof(wakefile_t));
   snprintf(section, 32, "wake_file_%d", i);
@@ -624,42 +594,82 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   }
   ring->wakefiles_size = i-1;
   
+
+  /*
+   * [resonator_1], [resonator_2], ...
+   */
+  ring->resonators = (resonator_t *) malloc(1 * sizeof(resonator_t));
+  config_get_fprint = true;
+    
+  /* first resonator */
+  i = 1;
+  snprintf(section, 32, "resonator_%d", i);
+	  
+  while(config_have_section(fp, section) && enable_resonators!=0)
+    {    
+      ring->resonators = (resonator_t *) realloc(ring->resonators, i * sizeof(resonator_t));
+      resonator_t * resonator = &(ring->resonators[i-1]);
+	
+      if(!config_get_double(fp, section, "Rs", &(resonator->Rs)))
+	return false;
+	
+      if(!config_get_double(fp, section, "fres", &tmp))
+	return false;
+      resonator->wr = (tmp*FGIGA)*2.0*M_PI; /* [GHz] -> [Hz] */
+	
+      if(!config_get_double(fp, section, "Qfactor", &(resonator->Qfactor)))
+	return false;
+	
+      if(resonator->Qfactor == 0.5)
+	fprintf(stderr, "WARNING: resonator %d has Qfactor = 0.5 and will be ignored! \n", i);
+	
+      if(!config_get_str(fp, section, "plane", plane_str)
+	 || !scan_plane(plane_str, &(resonator->plane)) )
+	return false;
+	
+	
+      /* next resonator */
+      i++;
+      snprintf(section, 32, "resonator_%d", i);
+    }
+  ring->resonators_size = i-1;
+    
   /*
    * [harmonic_cavity_1], [harmonic_cavity_2], ...
    */
   ring->longrange_resonators[LON] = (LR_resonator_t *) malloc(1 * sizeof(LR_resonator_t));
   i = 1;
-   /* first HC */
+  /* first HC */
   snprintf(section, 32, "harmonic_cavity_%d", i);
-  while(config_have_section(fp, section))
-  {
-    ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], i * sizeof(LR_resonator_t));
-    LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
-    
-    lr_resonator->facc = NULL;
-    lr_resonator->facs = NULL;
-
-    if(!config_get_int(fp, section, "m", &(lr_resonator->m)))
-      return false;
-
-    if(!config_get_double(fp, section, "Rs", &(lr_resonator->Rs)))
-      return false;
-    
-    if(!config_get_double(fp, section, "detune", &(lr_resonator->detune)))
-      return false;
-    
-    if(!config_get_double(fp, section, "Qfactor", &(lr_resonator->Qfactor)))
-      return false;
-    
-    /* Long range resonator always act in longitudinal axis */
-    
-    /* next resonator */
-    i++;
-    snprintf(section, 32, "harmonic_cavity_%d", i);
-  }
+  while(config_have_section(fp, section) && enable_resonators!=0)
+    {
+      ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], i * sizeof(LR_resonator_t));
+      LR_resonator_t * lr_resonator = &(ring->longrange_resonators[LON][i-1]);
+      
+      lr_resonator->facc = NULL;
+      lr_resonator->facs = NULL;
+      
+      if(!config_get_int(fp, section, "m", &(lr_resonator->m)))
+	return false;
+      
+      if(!config_get_double(fp, section, "Rs", &(lr_resonator->Rs)))
+	return false;
+	
+      if(!config_get_double(fp, section, "detune", &(lr_resonator->detune)))
+	return false;
+      
+      if(!config_get_double(fp, section, "Qfactor", &(lr_resonator->Qfactor)))
+	return false;
+	
+      /* Long range resonator always act in longitudinal axis */
+      
+      /* next resonator */
+      i++;
+      snprintf(section, 32, "harmonic_cavity_%d", i);
+    }
   ring->longrange_resonators_size[LON] = i-1;
-
-   /* other longrange longitudinal wakes */
+    
+  /* other longrange longitudinal wakes */
   i = 1;
   j = 1;
   k = 1;
@@ -667,57 +677,64 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   ring->longrange_resonators[HOR] = (LR_resonator_t *) malloc(1*sizeof(LR_resonator_t));
   ring->longrange_resonators[VER] = (LR_resonator_t *) malloc(1*sizeof(LR_resonator_t));
   snprintf(section, 32, "longrange_resonator_%d", i);
-  while(config_have_section(fp, section))
-  {
-    plane_t pl_tmp;
-    if(!config_get_str(fp, section, "plane", plane_str)
-       || !scan_plane(plane_str, &pl_tmp) )
-      return false;
-
-
-    LR_resonator_t * lr_resonator;
-    if (pl_tmp==LON) {
-      ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], (ring->longrange_resonators_size[LON]+j) * sizeof(LR_resonator_t));
-      lr_resonator = &(ring->longrange_resonators[LON][ring->longrange_resonators_size[LON]+j-1]);
-      j++;
+  while(config_have_section(fp, section) && enable_resonators!=0)
+    {
+      plane_t pl_tmp;
+      if(!config_get_str(fp, section, "plane", plane_str)
+	 || !scan_plane(plane_str, &pl_tmp) )
+	return false;
+      
+      
+      LR_resonator_t * lr_resonator;
+      if (pl_tmp==LON) {
+	ring->longrange_resonators[LON] = (LR_resonator_t *) realloc(ring->longrange_resonators[LON], (ring->longrange_resonators_size[LON]+j) * sizeof(LR_resonator_t));
+	lr_resonator = &(ring->longrange_resonators[LON][ring->longrange_resonators_size[LON]+j-1]);
+	j++;
+      }
+      else if (pl_tmp==HOR) {
+	ring->longrange_resonators[HOR] = (LR_resonator_t *) realloc(ring->longrange_resonators[HOR], k * sizeof(LR_resonator_t));
+	lr_resonator = &(ring->longrange_resonators[HOR][k-1]);
+	k++;
+      }
+      else if (pl_tmp==VER) {
+	ring->longrange_resonators[VER] = (LR_resonator_t *) realloc(ring->longrange_resonators[VER], l * sizeof(LR_resonator_t));
+	lr_resonator = &(ring->longrange_resonators[VER][l-1]);
+	l++;
+      }
+	
+      lr_resonator->plane = pl_tmp;
+      lr_resonator->facc = NULL;
+      lr_resonator->facs = NULL;
+      lr_resonator->m = 0;
+      lr_resonator->detune = 0;
+      
+      double tmp;
+      if(!config_get_double(fp, section, "fres", &tmp))
+	return false;
+      lr_resonator->wr = (tmp*FGIGA)*2.0*M_PI;
+      
+      if(!config_get_double(fp, section, "Rs", &(lr_resonator->Rs)))
+	return false;
+      
+      if(!config_get_double(fp, section, "Qfactor", &(lr_resonator->Qfactor)))
+	return false;
+      
+      /* Long range resonator always act in longitudinal axis */
+      
+      /* next resonator */
+      i++;
+      snprintf(section, 32, "longrange_resonator_%d", i);
     }
-    else if (pl_tmp==HOR) {
-      ring->longrange_resonators[HOR] = (LR_resonator_t *) realloc(ring->longrange_resonators[HOR], k * sizeof(LR_resonator_t));
-      lr_resonator = &(ring->longrange_resonators[HOR][k-1]);
-      k++;
-    }
-    else if (pl_tmp==VER) {
-      ring->longrange_resonators[VER] = (LR_resonator_t *) realloc(ring->longrange_resonators[VER], l * sizeof(LR_resonator_t));
-      lr_resonator = &(ring->longrange_resonators[VER][l-1]);
-      l++;
-    }
-    
-    lr_resonator->plane = pl_tmp;
-    lr_resonator->facc = NULL;
-    lr_resonator->facs = NULL;
-    lr_resonator->m = 0;
-    lr_resonator->detune = 0;
-
-    double tmp;
-    if(!config_get_double(fp, section, "fres", &tmp))
-      return false;
-    lr_resonator->wr = (tmp*FGIGA)*2.0*M_PI;
-
-    if(!config_get_double(fp, section, "Rs", &(lr_resonator->Rs)))
-      return false;
-    
-    if(!config_get_double(fp, section, "Qfactor", &(lr_resonator->Qfactor)))
-      return false;
-    
-    /* Long range resonator always act in longitudinal axis */
-    
-    /* next resonator */
-    i++;
-    snprintf(section, 32, "longrange_resonator_%d", i);
-  }
   ring->longrange_resonators_size[LON] += j-1;
   ring->longrange_resonators_size[HOR] = k-1;
   ring->longrange_resonators_size[VER] = l-1;
+  
+  
+  //else {
+  //ring->resonators_size = 0;
+  //ring->longrange_resonators_size[LON] = 0;
+  //ring->longrange_resonators_size[HOR] = 0;
+  //ring->longrange_resonators_size[VER] = 0;
 
   /* 
    * [rf_feedback]
@@ -725,7 +742,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   ring->rf_feedback = (rf_feedback_t *) malloc(1*sizeof(rf_feedback_t));
   rf_feedback_t * rffb = ring->rf_feedback;
   snprintf(section, 32, "rf_feedback");
-  if (config_have_section(fp,section)) {
+  if (config_have_section(fp,section) && enable_resonators!=0) {
     ring->has_rf_feedback = 1;
     if (!config_get_int(fp, section, "resonator", &(rffb->lr_resonator)))
       return false;
@@ -763,6 +780,48 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   }
   ring->active_HC_size = i-1;
 
+
+  /*
+   * [fbt_feedback]
+   */
+  i = 1;
+  snprintf(section,32,"fbt_feedback_%d",i);
+  while (config_have_section(fp,section)){
+    if (i==1)
+      ring->fbt_feedback = (fbt_feedback_t *) malloc(1*sizeof(fbt_feedback_t));
+    else
+      ring->fbt_feedback = (fbt_feedback_t *) realloc(ring->fbt_feedback,i*sizeof(fbt_feedback_t));
+    fbt_feedback_t * fbt = &(ring->fbt_feedback[i-1]);
+    fbt->offset_history = NULL;
+
+    if (!config_get_int(fp,section,"tap", &(fbt->tap)))
+      return false;
+
+    if (!config_get_int(fp,section,"downsampling", &(fbt->downsampling)))
+      return false;
+
+    if (!config_get_double(fp,section,"tune",&(fbt->tune)))
+      return false;
+
+    if (!config_get_double(fp,section,"phase",&(fbt->phase)))
+      return false;
+
+    if (!config_get_double(fp,section,"gain",&(fbt->gain)))
+      return false;
+
+    if (!config_get_str(fp,section,"plane",plane_str)
+	|| !scan_plane(plane_str,&(fbt->plane)))
+      return false;
+
+    config_get_fprint = false;  
+    if (!config_get_int(fp,section,"filter",&(fbt->filt_type)))
+      fbt->filt_type = 1;
+    config_get_fprint = true;
+
+    i++;
+    snprintf(section,32,"fbt_feedback_%d",i);
+  }
+  ring->fbt_feedback_size = i-1;
 
   /*
    * [selffield]
