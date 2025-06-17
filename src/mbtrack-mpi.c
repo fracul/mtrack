@@ -4,6 +4,7 @@
 #include "confmpi.h"
 #include "input.h"
 #include "bunch.h"
+#include "cavity_resonator.h"
 
 #ifdef DEBUG_FLOATING_POINT
 #define _GNU_SOURCE
@@ -67,6 +68,11 @@ int main(int argc, char ** argv)
   
   /* setup parameters */
   setup_ring_parameters(&ring);
+  if (track.NrevFastDamp > 0) {
+    ring.taue = ring.taue / 1000.0;
+    ring.aexpe = 1.0/ring.taue;
+    ring.De = 2 * ring.aexpe * ring.T0;
+  }
   macrop_model_setup_parameters(ring, track, &macrop_model);
   
   /* FBII related parameters */
@@ -121,7 +127,10 @@ int main(int argc, char ** argv)
           fprint_e_beam(log_input, ring, ebeam);
           
           if(ring.resonators_size > 0)
-                  fprint_resonators(log_input, ring, SelfFieldModel, macrop_model);
+	    fprint_resonators(log_input, ring, SelfFieldModel, macrop_model);
+
+	  if (ring.cavity_resonators_size > 0)
+	    fprint_cavresonator(log_input, ring);
         
           fclose(log_input);
         }

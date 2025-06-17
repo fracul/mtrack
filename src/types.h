@@ -10,6 +10,7 @@
 #include "def.h"
 #include "cyclic_array.h"
 #include "feedback_rf.h"
+#include "cavity_resonator.h"
 
 /**
  * \brief Resonator, can have SelfField effect and/or long-range Wake Field effect
@@ -128,16 +129,25 @@ typedef struct ring
   unsigned longrange_resonators_size[3]; /** number of lr resonators */
   unsigned Nbumax; /** longest Nbu of all LR resonators -> length of cyclic_array */
   unsigned lr_order; /** Approximation of the resonator wake up to this order */
-  double * lr_wake; /** Wake pot. at m*delta_bucket and its (order) drivatives of all lr
-  resonators */
+  double * lr_wake; /** Wake pot. at m*delta_bucket and its (order) drivatives of all lr resonators */
   rf_feedback_t * rf_feedback;
-  int has_rf_feedback;
 
   mode_feedback_t * mode_feedback;
   int mode_feedback_size;
+
+  unsigned rf_feedback_size;
   
   active_HC_t * active_HC;
   unsigned active_HC_size;
+
+  CAVITY_resonator_t * cavity_resonators; /** Cavity-type Resonators, 09/07/2018, Naoto Yamamoto */
+  unsigned cavity_resonators_size; /** number of cavity resonators, 09/07/2018, Naoto Yamamoto */
+  int cavity_resonator_main; /** Whether a Cavity-type Resonator will act as the main cavity */
+  
+  int cav_resonators_cavFB_outBunch;
+  int cav_resonators_drfFB_active;
+  FILE *cavity_resonators_cavFB_fp;
+  FILE *cavity_resonators_drfFB_fp;
 }
 ring_t;
 
@@ -160,7 +170,9 @@ typedef struct tracking
   int TrackPlane[3];
   long int NrevTot; /**< Total number of revolutions */
   long int NrevMon; /**< Turn interval between beam diagnostics */
+  long int NrevPotOut; /**< Turn interval between output of potentials */
   long int NrevPotentialsOut; /**< Start turn for writing potentials to output */
+  long int NrevFastDamp;
   
   model_t BunchModel; /** Flag for bunch models, MODEL_WEAK = 0, MODEL_STRONG = 1 */
   
@@ -173,6 +185,7 @@ typedef struct tracking
   int EnableActiveHC; /**< Activate active harmonic cavity in optics transformation */
   int EnableIdealHC;
   int EnableDiffCurr;
+  int EnableCavReCalc;
   
   int Nmlt; /**< Multiturns for the long range force */
   int NmultiT; /**< MultiT = Nmlt+2 is used in the program to stock CM data for all values of Nmlt */
@@ -271,6 +284,8 @@ typedef struct weak_bunch
   double Ib; /**< Bunch current [A] */
   unsigned Np; /**< Number of macro-particle in bunch */
   double qp; /**< Charge of each macro-particles [C] */
+  double wake0; /**< wake voltage at synchronus phase, N.Yamamoto*/
+  double * lr_wake; /**< Storage wake field for cavity-type resonator, N.Yamamoto */
   
   particle_t * particles; /**< Array with position and slope of each macroparticle */
   

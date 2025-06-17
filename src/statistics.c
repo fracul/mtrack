@@ -5,28 +5,32 @@
 #include "statistics.h"
 #include "bunch.h"
 
-inline vector_t
+//inline
+vector_t
 vector_new(const double xtau, const double x, const double z)
 {
   const vector_t v = {{xtau, x, z}};
   return v;
 }
 
-inline vector_t
+//inline
+vector_t
 vector_add(const vector_t a, const vector_t b)
 {
   const vector_t c = {{a.xtau + b.xtau, a.x + b.x, a.z + b.z}};
   return c;
 }
 
-inline vector_t
+//inline
+vector_t
 vector_mul_scalar(const vector_t a, const double k)
 {
   const vector_t v = {{k * a.xtau, k * a.x, k * a.z}};
   return v;
 }
 
-inline vector_t
+//inline
+vector_t
 vector_square(const vector_t a)
 {
   const vector_t v = {{a.xtau * a.xtau, a.x * a.x, a.z * a.z}};

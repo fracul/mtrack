@@ -33,8 +33,16 @@ tracking_scan_step_manager(long int rev, double * scan_val, const tracking_t * t
         }
       }
   }
+
+  else if (track->scan == 2) {
+    ring->taue += track->scan_step;
+    ring->aexpe = 1.0/ring->taue;
+    ring->De    = 2 * ring->aexpe * ring->T0;
+    
+    *scan_val = ring->taue;
+  }
   
-    return 0;
+  return 0;
 }
 
 
@@ -52,8 +60,16 @@ tracking_scan_step_worker(long int rev, double * scan_val, const tracking_t * tr
       if(ebeam->nfFill[i])
         ring->Ibunch[i] += track->scan_step /((double)ebeam->Nbunch);
   }
+
+  else if (track->scan == 2) {
+    ring->taue += track->scan_step;
+    ring->aexpe = 1.0/ring->taue;
+    ring->De    = 2 * ring->aexpe * ring->T0;
+    
+    *scan_val = ring->taue;
+  }
   
-    return 0;
+  return 0;
 }
 
 

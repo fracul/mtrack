@@ -7,6 +7,7 @@
 #include "cyclic_array.h"
 #include "confmpi.h"
 #include "feedback_rf.h"
+#include "cavity_resonator.h"
 
 /* Global variables */
 //extern ring_t ring;
@@ -55,6 +56,12 @@ transform_weak_bunch_optic(weak_bunch_t * bunch, const bunch_macroparticle_model
       particle = &(bunch->particles[jp]);
       /* xeps_gainj: energy gain by the RF cavity */
       xeps_gainj = eps_const * sin(ring->wrf * particle0[jp].pos.xtau + ring->phai0);   
+
+      /* Energy gain from cavity type resonators, including Main RF cavity.*/ // Naoto Yamamoto 10/07/2018    
+      if (ring->cavity_resonator_main > 0) xeps_gainj = 0;
+      //if(ring->cavity_resonators_size > 0)
+      xeps_gainj += bunch->lr_wake[jp];
+      /* Urad: energy loss by radiation and longrange_resonator (slope.xtau) */
       
       // adding potential of active HCs
       for(j = 0; j < ring->active_HC_size; j++)
@@ -506,6 +513,8 @@ construct_greensfunc_RW(selffield_model_t * SelfFieldModel,
 
     SelfFieldModel->Gl[0] += *(RW0_val) * 4*Z_0*C_LIGHT / (pi*beffL2) * ring->Lc;    
     SelfFieldModel->PlaneL ++;
+    
+    if (!track.EnableRW_short) return 1;
    } /* end LON */
 
    if (track.TrackPlane[VER])
@@ -552,7 +561,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
                                const selffield_model_t SelfFieldModel, 
                                const cyclic_array_t * all_moments, const ring_t *ring,
                                long unsigned int rev, FILE * fp, double scan_val, int kb, e_beam_t * ebeam, 
-			       double * phasor_end,  double * phasor_end_HOR, double * phasor_end_VER,
+			       double * phasor_end_TR, double * phasor_end,  double * phasor_end_HOR, double * phasor_end_VER,
 			       double * fnp_ring, double * fnp_HOR, double * fnp_VER)
 
 {
@@ -690,15 +699,23 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
                           ring, kb, fnp_HOR, ebeam, bunch, HOR);    
   if(ring->longrange_resonators_size[VER] > 0)
     construct_wake_phasor(lr_wake_VER, phasor_end_VER, &SelfFieldModel,
-                          ring, kb, fnp_VER, ebeam, bunch, VER);    
+                          ring, kb, fnp_VER, ebeam, bunch, VER);  
   
-  if(ring->longrange_resonators_size[LON] + SelfFieldModel.PlaneL > 0)
+   //Construction of the longrange/cavity wake potential:// 2018/07/16. Naoto Yamamoto,
+  if(ring->cavity_resonators_size > 0)
+    construct_wake_phasorTR(lr_wake, phasor_end_TR, &SelfFieldModel,
+			    ring, kb, fnp_ring, ebeam, bunch);    
+  
+  // adding longrange/cavity/selffield-planeL voltage // 2018/07/16. Naoto Yamamoto,
+  if(SelfFieldModel.PlaneL + ring->cavity_resonators_size + ring->longrange_resonators_size[LON] > 0)
   {
-    // Total effect of wake potentials
     for (jp = 0; jp < bunch->Np; jp++)
-      bunch->particles[jp].slope.xtau += factG * GL1[mapcell[jp]] + lr_wake[mapcell[jp]];
-  }
-  
+    {
+      bunch->particles[jp].slope.xtau += factG * GL1[mapcell[jp]];
+      bunch->lr_wake[jp] = lr_wake[mapcell[jp]];// treat as a part of the energy gain & rffocus
+    }
+    bunch->wake0=lr_wake[(int)(SelfFieldModel.Ncell*0.5)];
+  }  
   
   //**********************************************************************************//
   if(SelfFieldModel.PlaneV > 0)
@@ -730,7 +747,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
   
   //**********************************************************************************//
   
-  if(bunch->kb_out == 1 && (rev+1)%track.NrevMon == 0 && rev+1>=track.NrevPotentialsOut+(rev/track.NrevScan)*track.NrevScan) /* Output potentials */
+  if(bunch->kb_out == 1 && (rev+1)%track.NrevMon == 0 && rev+1>=track.NrevPotentialsOut+(rev/track.NrevScan)*track.NrevScan && (rev+1)%track.NrevPotOut == 0) /* Output potentials */
   {
     double rftest, taucell;
     const double dTau = SelfFieldModel.dT;
@@ -868,6 +885,12 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
  {
    int i, j, k, l, m;
    double V_old[2], V_new[2], progress[2], C[2], prog2beam[2], progb2beam[2];
+   double taubeam = 0;
+   double taub2beam = 0;
+   prog2beam[0] = 0;
+   prog2beam[1] = 0;
+   progb2beam[0] = 0;
+   progb2beam[1] = 0;
    
    // Determines the phasor after all bunches have Nturn-times passed
    for(l = 0; l < ring->longrange_resonators_size[plane]; l++)
@@ -895,23 +918,27 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
 
      double taubeam=0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
-       taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
-       taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
-       //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
-       //else taubeam = dTau*(Nbin/2+1);
+     rf_feedback_t * rf_fb = NULL;
+     for (i=0; i<ring->rf_feedback_size; i++) {
+       if (plane==LON && ring->rf_feedback[i].lr_resonator==l+1) {
+	 rf_fb  = &(ring->rf_feedback[i]);
+	 taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
+	 taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
+	 prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
+	 prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
+	 progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
+	 progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
+	 break;
+       }
      }
-     prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
-     prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
-     progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
-     progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
-     
+
      for(k=0; k<Nturns; k++)
      {
        for(m=0; m<ring->h; m++)
        {
          i = ring->h - m - 1;
-	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
+
+	 if (rf_fb!=NULL)
 	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
          if(ebeam->nfFill[i] == 1)
@@ -940,8 +967,8 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
            V_old[0] = V_new[0];
            V_old[1] = V_new[1];
          }
-	 if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
-	   rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
+	 if (rf_fb!=NULL)
+	   rffb_get_vrf_phi(rf_fb,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
        }
      }
      phasor_end[l*2] = V_new[0];
@@ -967,6 +994,12 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
    double V_new[2];
    double prog2beam[2];
    double progb2beam[2];
+   double taubeam = 0;
+   double taub2beam = 0;
+   prog2beam[0] = 0;
+   prog2beam[1] = 0;
+   progb2beam[0] = 0;
+   progb2beam[1] = 0;
    
    // Determines the phasor after all bunches have passed and stores the sum in lr_wake
    for(l = 0; l < ring->longrange_resonators_size[plane]; l++)
@@ -983,29 +1016,33 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
      C[1] = lr_res->wr;
      progress[0] = exp(C[0] * dTau) * cos(C[1] * dTau); // Decay and rotation of phasor during one bin
      progress[1] = exp(C[0] * dTau) * sin(C[1] * dTau);
-     
+
      V_old[0] = phasor_end[l*2];
      V_old[1] = phasor_end[l*2 + 1];
      V_new[0] = phasor_end[l*2];
      V_new[1] = phasor_end[l*2 + 1];
+
      double taubeam = 0;
      double taub2beam = 0;
-     if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1) {
-       taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
-       taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
-       //if (Nbin/2==Nbin/2.0) taubeam = dTau/2.0*(Nbin+1);
-       //else taubeam = dTau*(Nbin/2+1);
+     rf_feedback_t * rf_fb = NULL;
+     for (i=0; i<ring->rf_feedback_size; i++) {
+       if (plane==LON && ring->rf_feedback[i].lr_resonator==l+1) {
+	 rf_fb  = &(ring->rf_feedback[i]);
+	 taubeam = SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*1.5;
+	 taub2beam = -SelfFieldModel->Nsigma*SelfFieldModel->sigma_tau+dTau*0.5-tbucket;
+	 prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
+	 prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
+	 progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
+	 progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
+	 break;
+       }
      }
-     prog2beam[0] = exp(C[0] * taubeam) * cos(C[1] * taubeam); // Decay and rotation of phasor until synchronous phase
-     prog2beam[1] = exp(C[0] * taubeam) * sin(C[1] * taubeam); // (for RF feedback)
-     progb2beam[0] = exp(C[0] * taub2beam) * cos(C[1] * taub2beam); // Decay and rotation of phasor until synchronous phase
-     progb2beam[1] = exp(C[0] * taub2beam) * sin(C[1] * taub2beam); // (for RF feedback)
      
      for(m=0; m<ring->h; m++)
      {
        i = ring->h - m - 1;
-       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
-	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
+       if (rf_fb!=NULL)
+	 rffb_get_vrf_phi(rf_fb,V_new[0]*prog2beam[0]-V_new[1]*prog2beam[1],V_new[0]*prog2beam[1]+V_new[1]*prog2beam[0]);
 
        if(ebeam->nfFill[i] == 1)
        {
@@ -1037,8 +1074,8 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
          V_old[0] = V_new[0];
          V_old[1] = V_new[1];
        }
-       if (ring->has_rf_feedback && plane==LON && ring->rf_feedback->lr_resonator==l+1)
-	 rffb_get_vrf_phi(ring->rf_feedback,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
+       if (rf_fb!=NULL)
+	 rffb_get_vrf_phi(rf_fb,V_new[0]*progb2beam[0]-V_new[1]*progb2beam[1],V_new[0]*progb2beam[1]+V_new[1]*progb2beam[0]);
      }    
      phasor_end[l*2] = V_new[0];
      phasor_end[l*2 + 1] = V_new[1];   

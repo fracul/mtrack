@@ -371,13 +371,10 @@ weak_bunch_writeout_tbtbbb(const long int NrevTot, const long int NrevMon,
 	long int irevmon = rev/NrevMon-1;
 	unsigned int ibunch;
 	fprintf(fp," %3ld %15.8e", rev, scan_val_hist[m]);
-	for (ibunch=0; ibunch<ring.Nharm; ibunch++) {
-	  if (ebeam.nfFill[ibunch])
-	    {
-	      	if (plane==HOR) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].x);
-	      	if (plane==VER) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].z);
-	      	if (plane==LON) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].xtau);
-	    }
+	for (ibunch=0; ibunch<ebeam.Nbunch; ibunch++) {
+	  if (plane==HOR) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].x);
+	  if (plane==VER) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].z);
+	  if (plane==LON) fprintf(fp," %15.8e",CMhist->cm[irevmon*ebeam.Nbunch+ibunch].xtau);
 	}
 	fprintf(fp,"\n");
       }

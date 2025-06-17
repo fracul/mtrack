@@ -81,7 +81,7 @@ transform_weak_bunch_selffield(weak_bunch_t * bunch,
 			       const selffield_model_t SelfFieldModel, 
 			       const cyclic_array_t * all_moments, const ring_t *ring,
 			       long unsigned int rev, FILE * fp, double scan_val, int kb, 
-			       e_beam_t * ebeam, double * phasor_end, double * phasor_end_HOR, double * phasor_end_VER,
+			       e_beam_t * ebeam, double * phasor_end_TR, double * phasor_end, double * phasor_end_HOR, double * phasor_end_VER,
 			       double * fnp_ring, double * fnp_HOR, double * fnp_VER);
 
 
@@ -103,7 +103,7 @@ transform_weak_bunch_RW_longrange_cyclic(const int in, const int bpos,
                                   e_beam_t * ebeam,
                                   weak_bunch_t * bunch,
                                   ring_t * ring,
-                                  tracking_t * track);
+				  tracking_t * track);
 
 /**
  * Stores actual particle distribution in bins of all bunches

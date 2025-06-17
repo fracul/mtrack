@@ -7,9 +7,11 @@ typedef struct rffeedback
 {
   double vrf_design;
   double phi0_design;
+  double gain;
   int lr_resonator;
   int len_average;
   int count;
+  int active_HC_no;
   cyclic_array_t * voltage_history;
 } rf_feedback_t;
 

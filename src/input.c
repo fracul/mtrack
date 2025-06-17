@@ -11,6 +11,7 @@
 #include "def.h"
 #include "transform_weak.h"
 #include "test.h"
+#include "cavity_resonator.h"
 
 static const char * const fillings_str[] =
 {
@@ -170,7 +171,8 @@ bool read_input(char filename[FILENAME_MAX], ring_t * ring, tracking_t * track,
       track->EnableQuantum = 1;
       track->EnableAmpinv_out = 0;
       track->EnableRW_short = 0; 
-      track->EnableRW_long = 0; 
+      track->EnableRW_long = 0;
+      track->NrevFastDamp = 0;
       track->filling = SINGLE3;
       track->triggerRW = 0;
       track->BunchModel = MODEL_WEAK;
@@ -328,7 +330,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     return false;
   if(!config_get_long_int(fp, section, "NrevMon", &(track->NrevMon)))
     return false;
-
+  
   if(!config_get_int(fp, section, "EnableRW_short", &(track->EnableRW_short)))
     return false;
   if(!config_get_int(fp, section, "EnableRW_long", &(track->EnableRW_long)))
@@ -341,10 +343,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     return false;
   
   config_get_fprint = false;
+  if (!config_get_long_int(fp, section, "NrevFastDamp", &(track->NrevFastDamp)))
+    track->NrevFastDamp = 0;  
   if(!config_get_long_int(fp, section, "NrevPotentialsOut", &(track->NrevPotentialsOut)))
     track->NrevPotentialsOut = 0;
+  if(!config_get_long_int(fp, section, "NrevPotOut", &(track->NrevPotOut)))
+    track->NrevPotOut = track->NrevMon;
   if(!config_get_long_int(fp, section, "EnableRW_short_LON", &(track->EnableRW_short_LON)))
-    track->EnableRW_short_LON = 1;
+    track->EnableRW_short_LON = track->EnableRW_short;
   if(!config_get_int(fp, section, "triggerRW", &(track->triggerRW)))
     track->triggerRW = 0;
   if(!config_get_int(fp, section, "Nmlt", &(track->Nmlt)) && track->EnableRW_long)
@@ -364,7 +370,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       return false;
     if(track->current_ratio < 0. || track->current_ratio > 1.) 
     {
-      fprintf(stderr, "ERROR: current_ration not between 0 and 1.\n");
+      fprintf(stderr, "ERROR: current_ratio not between 0 and 1.\n");
       return false;
     }
   }
@@ -411,6 +417,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
 
   /*amplitude dependent tune shifts*/
   config_get_fprint = false; /* no error printing */
+  if (!config_get_double(fp,section,"phi0",&(ring->phai0))) ring->phai0 = 100;
   if (!config_get_double(fp,section,"CHH",&(ring->CHH))) ring->CHH = 0;
   if (!config_get_double(fp,section,"CHV",&(ring->CHV))) ring->CHH = 0;
   if (!config_get_double(fp,section,"CVH",&(ring->CVH))) ring->CHH = 0;
@@ -454,7 +461,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
     
   
   /* Wall resistivity needed if RW enabled */
-  if(track->EnableRW_short == 1 || track->EnableRW_long == 1)
+  if(track->EnableRW_short == 1 || track->EnableRW_long == 1 || track->EnableRW_short_LON)
   {
     if(!config_get_double(fp, section, "rhorw", &(ring->rhorw)))
       return false;
@@ -462,14 +469,14 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       return false;
     if(!config_get_double(fp, section, "beffL2", &(ring->beffL[1])))
       return false;
-    if(track->TrackPlane[HOR])
+    if(track->EnableRW_short && track->TrackPlane[HOR])
     {
       if(!config_get_double(fp, section, "beffH3", &(ring->beffH[0])))
         return false;
       if(!config_get_double(fp, section, "beffH4", &(ring->beffH[1])))
         return false;
     }
-    if(track->TrackPlane[VER])
+    if(track->EnableRW_short && track->TrackPlane[VER])
     {
       if(!config_get_double(fp, section, "beffV3", &(ring->beffV[0])))
         return false;
@@ -750,22 +757,36 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   /* 
    * [rf_feedback]
    */
-  ring->rf_feedback = (rf_feedback_t *) malloc(1*sizeof(rf_feedback_t));
-  rf_feedback_t * rffb = ring->rf_feedback;
-  snprintf(section, 32, "rf_feedback");
-  if (config_have_section(fp,section)) {
-    ring->has_rf_feedback = 1;
-    if (!config_get_int(fp, section, "resonator", &(rffb->lr_resonator)))
+  i = 1;
+  snprintf(section, 32, "rf_feedback_%d", i);
+  while (config_have_section(fp, section)) {
+    if (i==1)
+      ring->rf_feedback = (rf_feedback_t *) malloc(1 * sizeof(rf_feedback_t));
+    else
+      ring->rf_feedback = (rf_feedback_t *) realloc(ring->rf_feedback, i*sizeof(rf_feedback_t));
+    rf_feedback_t * rffb = &(ring->rf_feedback[i-1]);
+    rffb->voltage_history = NULL;
+    
+    if (!config_get_int(fp,section,"resonator", &(rffb->lr_resonator)))
       return false;
 
-    if (!config_get_int(fp, section, "averaging_length", &(rffb->len_average)))
+    if (!config_get_int(fp,section,"averaging_length", &(rffb->len_average)))
       return false;
-     
+
+    if (!config_get_int(fp,section, "active_HC", &(rffb->active_HC_no)))
+      return false;
+
+    if (!config_get_double(fp,section, "gain", &(rffb->gain)))
+      return false;
+    
+    i++;
+    snprintf(section, 32, "rf_feedback_%d", i);
   }
+  ring->rf_feedback_size = i-1;
   
-   /*
-   * [active_HC_1], [active_HC_2], ...
-   */
+  /*
+  * [active_HC_1], [active_HC_2], ...
+  */
   ring->active_HC = (active_HC_t *) malloc(1 * sizeof(active_HC_t));
   config_get_fprint = true;  
   /* first active HC */
@@ -791,6 +812,10 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   }
   ring->active_HC_size = i-1;
 
+  /*
+   * [cavity_resonator_1], [cavity_resonator_2], ... , 09/07/2018, created by Naoto Yamamoto
+   */
+  if(!read_conf_cav_res(fp,ring,track)) return false;
 
   /*
    * [selffield]
@@ -814,9 +839,9 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
   if(config_get_double(fp, section, "aindH", &(tmp)))
     SelfFieldModel->aindH = tmp / (2.0 * M_PI * FGIGA);
   
-  config_get_fprint = true;  
-  int lr_res_tot = ring->longrange_resonators_size[LON]+ring->longrange_resonators_size[HOR]+ring->longrange_resonators_size[VER];
-  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0 || ring->wakefiles_size > 0)
+  config_get_fprint = true;
+  int lr_res_tot = ring->longrange_resonators_size[LON]+ring->longrange_resonators_size[HOR]+ring->longrange_resonators_size[VER]+ring->cavity_resonators_size;
+  if(ring->resonators_size > 0 || track->EnableRW_short == 1 || lr_res_tot > 0 || ring->wakefiles_size > 0 || ring->active_HC_size > 0 || track->EnableRW_short_LON)
   {
     if(!config_have_section(fp, section))
       return false;
@@ -854,7 +879,7 @@ bool read_conf_file(FILE * fp, ring_t * ring, tracking_t * track,
       if(!config_get_long_int(fp, section, "NrevScan", &(track->NrevScan)))
         return false;
     
-      if(track->scan == 1)
+      if(track->scan < 3)
       {
         if(!config_get_double(fp, section, "scan_start", &(track->scan_start)))
           return false;
@@ -1090,7 +1115,7 @@ int config_get(FILE * fp, const char * section, const char * identifier, const c
   return r;
 }
 
-inline
+//inline
 bool config_get_int(FILE * fp, const char * section, const char * identifier, int * r)
 {
   if(config_get(fp, section, identifier, "%d", r) == 1)
@@ -1099,7 +1124,7 @@ bool config_get_int(FILE * fp, const char * section, const char * identifier, in
     return false;
 }
 
-inline
+//inline
 bool config_get_long_int(FILE * fp, const char * section, const char * identifier, long int * r)
 {
   if(config_get(fp, section, identifier, "%d", r) == 1)
@@ -1108,7 +1133,7 @@ bool config_get_long_int(FILE * fp, const char * section, const char * identifie
     return false;
 }
 
-inline
+//inline
 bool config_get_double(FILE * fp, const char * section, const char * identifier, double * r)
 {
   if(config_get(fp, section, identifier, "%lf", r) == 1)
@@ -1117,7 +1142,7 @@ bool config_get_double(FILE * fp, const char * section, const char * identifier,
     return false;
 }
 
-inline
+//inline
 bool config_get_str(FILE * fp, const char * section, const char * identifier,
                     char * r)
 {
@@ -1462,7 +1487,7 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
   for (kb=0; kb<ebeam->Nbunch; kb++) {
     if(track->EnableDiffCurr) {
       if (kb%2==0) ebeam->Ib_frac[kb] = track->current_ratio;
-      else ebeam->Ib_frac[kb] = 1.0 - track->current_ratio;
+      else ebeam->Ib_frac[kb] = 2.0 - track->current_ratio;
     }
     else ebeam->Ib_frac[kb] = 1.0;
   }
@@ -1596,7 +1621,7 @@ bool setup_ring_parameters(ring_t * ring)
   ring->Nharm   = ring->h;
   ring->T0     = ring->Nharm/ring->frf/FMEGA;
   ring->w0      = (2.0*M_PI) / ring->T0; /*SI*/
-  ring->Ibunch = (double *) malloc(ring->Nharm*sizeof(double));
+  ring->Ibunch = (double *) calloc(ring->Nharm, sizeof(double));
   ring->AmpDependdQH = (ring->CHH != 0.0) || (ring->CHV != 0.0);
   ring->AmpDependdQV = (ring->CVH != 0.0) || (ring->CVV != 0.0);
   
@@ -1642,7 +1667,6 @@ bool setup_ring_parameters(ring_t * ring)
 
 
   ring->sn0     = ring->q;
-  ring->phai0   = asin( ring->q );
   ring->fc1     = ring->ac / ring->wso;
   ring->fc12    = pow(ring->fc1, 2);
 
@@ -1687,6 +1711,12 @@ bool setup_ring_parameters(ring_t * ring)
 	//eloss_harm += vb*cos(genphase);
       }
     }
+
+    //LR_resonator_t * lr_resonator = &(ring->longrange_resonators[i-1]);
+    //lr_resonator->wr = lr_resonator->m * ring->wrf + lr_resonator->detune * 2 * M_PI;
+    //if (lr_resonator->m>1) mult *= (double)lr_resonator->m*lr_resonator->m / (lr_resonator->m*lr_resonator->m - 1.);  
+    //else if (!ring->rf_feedback_size > 0) genphase = atan(lr_resonator->Qfactor * ( lr_resonator->wr/ring->wrf - ring->wrf/lr_resonator->wr ));
+
     tmp = (lr_resonator->wr * 0.5 / lr_resonator->Qfactor);
     lr_resonator->Nturn = (unsigned) (log(2) * 10 / tmp / ring->T0) + 1;
     lr_resonator->Nbu = lr_resonator->Nturn * ring->h;
@@ -1699,25 +1729,31 @@ bool setup_ring_parameters(ring_t * ring)
       Ntmp = lr_resonator->Nbu;
   }
   //ring->phai0 = asin(mult * ring->q) - 0*genphase/2.0;
-  ring->phai0 = asin(ring->q+eloss_harm/ring->Vrf0);
   ring->Nbumax = Ntmp;
   ring->lr_order = 6;
-
-  if (ring->has_rf_feedback) {
-    rf_feedback_t * rf_fb = ring->rf_feedback;
-    rf_fb->vrf_design = 1*ring->Vrf0;
-    if (ring->ac<0) rf_fb->phi0_design = M_PI-ring->phai0;
-    else rf_fb->phi0_design = 1*ring->phai0;
-    //ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase-rf_fb->phi0_design));
-    ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase+rf_fb->phi0_design));
-    //ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
-    ring->phai0 = asin(vb/ring->Vrf0*sin(M_PI/2+rf_fb->phi0_design+genphase))+rf_fb->phi0_design;
-    if (rf_fb->len_average==-1) ring->has_rf_feedback = 0;
-    else if (fabs(rf_fb->len_average)>ring->Nbumax) ring->Nbumax = fabs(rf_fb->len_average);
+  bool phai0calc = false;
+  if (fabs(ring->phai0) == 100) {
+    phai0calc = true;
+    ring->phai0 = asin(ring->q+eloss_harm/ring->Vrf0);
   }
-  else ring->phai0 += asin(vb/ring->Vrf0*cos(ring->phai0+genphase));
 
-  if (ring->ac<0) ring->phai0 = M_PI-ring->phai0;
+  for (i=0; i<ring->rf_feedback_size; i++) {
+    rf_feedback_t * rf_fb = &(ring->rf_feedback[i]);
+    if (rf_fb->active_HC_no==0) {
+      rf_fb->vrf_design = 1*ring->Vrf0;
+      if (ring->ac<0) rf_fb->phi0_design = M_PI-ring->phai0;
+      else rf_fb->phi0_design = 1*ring->phai0;
+      //ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase-rf_fb->phi0_design));
+      ring->Vrf0 = sqrt(vb*vb+rf_fb->vrf_design*rf_fb->vrf_design+2*vb*rf_fb->vrf_design*sin(genphase+rf_fb->phi0_design));
+      //ring->phai0 = - rf_fb->phi0_design + acos(vb/ring->Vrf0*cos(rf_fb->phi0_design+genphase)) - genphase;
+      ring->phai0 = asin(vb/ring->Vrf0*sin(M_PI/2+rf_fb->phi0_design+genphase))+rf_fb->phi0_design;
+    }
+    if (fabs(rf_fb->len_average)>ring->Nbumax) ring->Nbumax = fabs(rf_fb->len_average);
+  }
+  
+  if (phai0calc && ring->rf_feedback_size==0)  ring->phai0 += asin(vb/ring->Vrf0*cos(ring->phai0+genphase));
+
+  if (phai0calc && ring->ac<0) ring->phai0 = M_PI-ring->phai0;
    
   return true;
 }
@@ -1738,6 +1774,12 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
   if(track->scan == 1)
     { //TODO: Chroma scan
       ring->Iring = track->scan_start;
+    }
+  if (track->scan == 2)
+    {
+      ring->taue  = track->scan_start;
+      ring->aexpe = 1.0/ring->taue;
+      ring->De    = 2 * ring->aexpe * ring->T0;
     }
   if(track->scan == 3)
     {
@@ -1769,7 +1811,7 @@ bool setup_tracking_parameters(ring_t * ring, tracking_t * track, selffield_mode
     if(ring->beffH[1] > b && track->TrackPlane[1] == 1) b = ring->beffH[1];
     else if(ring->beffV[1] > b && track->TrackPlane[2] == 1) b = ring->beffV[1];
 
-    if (track->EnableRW_short)
+    if (track->EnableRW_short || track->EnableRW_short_LON)
     { // RW ala Bane
 
       track->s0 = pow((2 * b * b * ring->rhorw / Z_0), 1.0/3.0);
@@ -1947,6 +1989,18 @@ fprint_resonators(FILE * fp, const ring_t ring, const selffield_model_t SelfFiel
     fprintf(fp, "  Vpeak [%d] = %8.2lf [MV],  nHC [%d] = %8.2lf,  phase [%d] = %8.2lf [rad] \n",
             k, aHC.Vpeak/FMEGA, k, aHC.nHC, k, aHC.phi_aHC);
   }
+
+  fprintf(fp, " ===================================================================\n");
+  fprintf(fp, "   RF Feedback Input: \n");
+  fprintf(fp, " ===================================================================\n");
+  fprintf(fp, "  RF-Feedback: number of feedbacks: %u\n", ring.rf_feedback_size);
+  for(k = 0; k < ring.rf_feedback_size; k++)
+  {
+    const rf_feedback_t rf_fb = ring.rf_feedback[k];
+    fprintf(fp, "   LR-Resonator  [%d] = %d,  averaging_length [%d] = %d,  active_HC [%d] = %d \n",
+            k, rf_fb.lr_resonator, k, rf_fb.len_average, k, rf_fb.active_HC_no);
+  }
+  
   return 0; 
 }
 
@@ -1982,7 +2036,17 @@ int ring_destroy(ring_t * ring)
     free(ring->lr_wake);
     ring->lr_wake = NULL; 
   }
-    
+
+  if(ring->rf_feedback_size > 0)
+  {
+    for(i = 0; i < ring->rf_feedback_size; i++)
+      {
+	if(ring->rf_feedback[i].voltage_history != NULL)
+          cyclic_array_destroy(ring->rf_feedback[i].voltage_history);
+      }
+    free(ring->rf_feedback);
+  }
+  
   return 1;
 }
 
