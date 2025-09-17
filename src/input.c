@@ -1491,6 +1491,8 @@ bool e_beam_setup(tracking_t * track, ring_t * ring, e_beam_t * ebeam)
     }
     else ebeam->Ib_frac[kb] = 1.0;
   }
+
+  ring->cav_resonators_cavFB_outBunch = track->bunch_out[0];
   
   return true;
 }
