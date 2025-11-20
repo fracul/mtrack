@@ -1070,11 +1070,11 @@ wake_phasor_initTR(ring_t * ring, double * fnp_ring, const selffield_model_t * S
         ptmp= 1- tmpVc[1]/cav_res->Vc[1];// dtmp > 1.0, Vc -> high
 	//dtmp = sqrt(tmpVc[0]*tmpVc[0]+tmpVc[1]*tmpVc[1])/sqrt(cav_res->Vc[0]*cav_res->Vc[0]+cav_res->Vc[1]*cav_res->Vc[1]);
 	//ptmp = atan2(tmpVc[1],tmpVc[0])-atan2(cav_res->Vc[1]/cav_res->Vc[0]);
-        dtmp=cav_res->VcAP[0] / get_cavVolFB_value(&cav_res->cavVolFB,0);// dtmp > 1.0, Vc -> small
-        ptmp=get_cavVolFB_value(&cav_res->cavVolFB,1) - cav_res->VcAP[1];// ptmp < 1.0, Phase of Vc -> small	
+        //dtmp=cav_res->VcAP[0] / get_cavVolFB_value(&cav_res->cavVolFB,0);// dtmp > 1.0, Vc -> small
+        //ptmp=get_cavVolFB_value(&cav_res->cavVolFB,1) - cav_res->VcAP[1];// ptmp < 1.0, Phase of Vc -> small	
         ttmp= get_cavVolFB_value(&cav_res->cavVolFB,1) - cav_res->geneVoltRes[1] - cav_res->tunerOffset;
 
-        if(turn > cav_res->cavVolFB.switchOnTurn && turn < cav_res->cavVolFB.switchOffTurn) cavity_PIfeedback(cav_res,ring,0,0,ttmp);// if Vc is given
+        if(turn > cav_res->cavVolFB.switchOnTurn && turn < cav_res->cavVolFB.switchOffTurn) cavity_PIfeedback(cav_res,ring,dtmp,ptmp,ttmp);// if Vc is given
         if(ring->cav_resonators_cavFB_outBunch == kb && turn%cav_res->fbMon == 0) 
 		fprintf(ring->cavity_resonators_cavFB_fp,"  %.5e %.5e %.6lf %.5e",dtmp,ptmp,ttmp,cav_res->cavVolFB.gainInte[0]*cav_res->cavVolFB.integralMemory[0]); // for debug
 		//fprintf(ring->cavity_resonators_cavFB_fp,"  %.5e %.5e %.6lf %.5e %.5e",dtmp,ptmp,ttmp,cav_res->geneVoltRes[1],cav_res->cavVolFB.gainInte[0]*cav_res->cavVolFB.integralMemory[0]); // for debug
@@ -1336,7 +1336,7 @@ void cavity_feedback(CAVITY_resonator_t * cav_res, double dtmp,double ptmp)
       cav_res->geneVolt = fabs(cav_res->geneVoltRes[0] * cos(cav_res->detune));
       break;
     }
-    case 14: // constant detune angle, phase shifted by addition not multiplicatively with integral loop
+    case 114: // constant detune angle, phase shifted by addition not multiplicatively with integral loop
     { 
       cavFB->integralMemory[0] = cavFB->integralMemory[0]*pow(dtmp,cavFB->integralMemoryFac[0]);
       cavFB->integralMemory[1] += ptmp*cavFB->integralMemoryFac[1];
@@ -1501,7 +1501,7 @@ void cavity_PIfeedback(CAVITY_resonator_t * cav_res, const ring_t * ring, double
   switch (cav_res->mode) 
   { 
     // 12 : Vg <= Vc (1), Psi <= Pc (2)
-    case 12: // for conventional active cavity, geneVolt & detune angle 
+    case 111: // for conventional active cavity, geneVolt & detune angle 
     { // IQ based feedback general condition, 2022/05/16 N.Yamamoto
 
       // Genrerator PID FB  
@@ -1664,16 +1664,16 @@ int fprint_cavresonator(FILE *fp,const ring_t ring)
     else {
       fprintf(fp, "  FBLoopDelay [%d] = %d, FBSample [%d] = %d (Unit in bucket number)\n",
 		      k, resonator.cavVolFB.loopDelay,k, resonator.cavVolFB.sample);
-      if(resonator.mode > 100)
-      {
-        fprintf(fp, "  FBPgainAmp [%d] = %.5lf,  FBPgainPhase [%d] = %.5lf,  FBPgainTuner [%d] = %.5lf\n",
-		      k, resonator.cavVolFB.gainProp[0], k, resonator.cavVolFB.gainProp[1], k, resonator.cavVolFB.gainProp[2]);
-        fprintf(fp, "  FBIgainAmp [%d] = %.5lf,  FBIgainPhase [%d] = %.5lf,  FBIntegralFacorAmp [%d] = %.3e,  FBIntegralFactorPhase [%d] = %.3e\n",
-		      k, resonator.cavVolFB.gainInte[0], k, resonator.cavVolFB.gainInte[1], k, resonator.cavVolFB.integralMemoryFac[0],k, resonator.cavVolFB.integralMemoryFac[1]);
-      } else {
-        fprintf(fp, "  FBPgain [%d] = %.5lf,  FBIgain [%d] = %.5lf,  FBPgainTuner [%d] = %.5lf\n",
-		      k, resonator.cavVolFB.gainProp[0], k, resonator.cavVolFB.gainInte[0], k, resonator.cavVolFB.gainProp[2]);
-      }
+    }
+    if(resonator.mode > 100)
+    {
+      fprintf(fp, "  FBPgainAmp [%d] = %.5lf,  FBPgainPhase [%d] = %.5lf,  FBPgainTuner [%d] = %.5lf\n",
+	      k, resonator.cavVolFB.gainProp[0], k, resonator.cavVolFB.gainProp[1], k, resonator.cavVolFB.gainProp[2]);
+      fprintf(fp, "  FBIgainAmp [%d] = %.5lf,  FBIgainPhase [%d] = %.5lf,  FBIntegralFacorAmp [%d] = %.3e,  FBIntegralFactorPhase [%d] = %.3e\n",
+	      k, resonator.cavVolFB.gainInte[0], k, resonator.cavVolFB.gainInte[1], k, resonator.cavVolFB.integralMemoryFac[0],k, resonator.cavVolFB.integralMemoryFac[1]);
+    } else {
+      fprintf(fp, "  FBPgain [%d] = %.5lf,  FBIgain [%d] = %.5lf,  FBPgainTuner [%d] = %.5lf\n",
+	      k, resonator.cavVolFB.gainProp[0], k, resonator.cavVolFB.gainInte[0], k, resonator.cavVolFB.gainProp[2]);
     }
     fprintf(fp, "  TuneRange [%d] = %8.5f, TuneDeadRange [%d] = %8.5f,  FourierAmp [%d]= %8.5f,  FourierPhase [%d] = %8.5f\n",
             k, resonator.cavVolFB.tuneRange, k, resonator.cavVolFB.tuneDeadRange, k, resonator.FourierAmp, k, resonator.FourierPhase);
